@@ -1,0 +1,187 @@
+\documentclass[12pt]{report}
+
+\usepackage[francais]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+
+\usepackage[cyr]{aeguill}
+\usepackage{fancyheadings}
+\usepackage[pdftex]{graphicx}
+\DeclareGraphicsExtensions{.jpg,.pdf,.png}
+\usepackage[pdftex,colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{anysize}
+\marginsize{22mm}{14mm}{12mm}{25mm}
+\usepackage{natbib}
+\usepackage{icomma}
+
+
+\begin{document}
+\pagestyle{fancyplain}
+\renewcommand{\chaptermark}[1]{\markboth{\chaptername\ \thechapter. #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection. #1}}
+\lhead[]{\fancyplain{}{\bfseries\leftmark}}
+\rhead[]{\fancyplain{}{\bfseries\thepage}}
+\cfoot{}
+
+%% Voilà mes légendes de figures comme je les aime :
+\makeatletter
+\def\figurename{{\protect\sc \protect\small\bfseries Fig.}}
+\def\f@ffrench{\protect\figurename\space{\protect\small\bf \thefigure}\space}
+\let\fnum@figure\f@ffrench%
+\let\captionORI\caption
+\def\caption#1{\captionORI{\rm\small #1}}
+\makeatother
+
+\graphicspath{{img/}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Couverture :
+\thispagestyle{empty}
+{\Large
+\begin{center}
+Prénom NOM
+\vskip1cm
+
+%% Pour redéfinir la distance entre la boite et le texte
+\fboxsep6mm
+%% Pour redéfinir l'épaisseur de la boite
+\fboxrule1.3pt
+
+%% Le \vphantom{\int_\int} sert à introduire de l'espace entre les deux lignes
+%% (essayez donc de le commenter)
+$$\fbox{$
+  \begin{array}{c}
+  \textbf{Titre}
+  \vphantom{\int_\int}
+  \end{array}
+  $}
+$$
+\end{center}
+\vskip8cm
+
+\begin{flushright}
+\textit{Encadrant :}
+
+Zacharie ALES
+\end{flushright}
+}
+
+\clearpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Table des matières :
+\renewcommand{\baselinestretch}{1.30}\small \normalsize
+
+\tableofcontents
+
+\renewcommand{\baselinestretch}{1.18}\small \normalsize
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Introduction :
+\chapter{Introduction}
+
+\section{Exemples}
+
+\subsection{Bases}
+
+Text normal.
+
+\textit{Texte italique.}
+
+\textbf{Texte en gras.}
+
+\underline{Texte souligné.}
+
+\subsection{Listes}
+
+Liste sans numéro :
+\begin{itemize}
+\item item 1 ;
+\item item 2.
+\end{itemize}
+
+Liste avec numéro :
+\begin{enumerate}
+\item item 1 ;
+\item item 2.
+\end{enumerate}
+
+\subsection{Formules mathématiques}
+
+Exemple de formule mathématique :
+$ x_j + \alpha_j = \varepsilon_1 + z^2 + \frac 1 2 + \sum_{i=1}^n w_i\quad \forall j\in\{1,
+..., p\}$
+
+Exemple d'équation numérotée :
+
+\begin{equation}
+x = y
+  \label{eq:monEquation}
+\end{equation}
+
+Référence à cette équation : \eqref{eq:monEquation}.
+
+\subsection{Tableaux}
+
+La table~\ref{tab:ex} contient trois colonnes :
+\begin{itemize}
+\item la première est centrée à gauche('l' : left) ;
+\item la seconde est centrée ('c' : center) ;
+\item la troisième est centrée à droite ('r' : right)
+\end{itemize}
+\begin{table}[h!]
+  \centering
+\begin{tabular}{lcr}
+\hline % Représente une ligne horizontale (doit toujours être en début
+       % de ligne
+
+\textbf{Titre 1} & \textbf{Titre 2} & \textbf{Titre 3} \\
+\hline
+
+c1 & c2 & c3 \\
+c4 & c5 & c6\\
+\hline
+\end{tabular}
+
+\caption{Exemple de table.}
+\label{tab:ex}
+\end{table}
+
+
+\subsection{Figures}
+
+La figure~\ref{fig:maFigure} représente le logo de l'ENSTA.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[height=4cm]{Logo_ENSTA_Paris.png}
+  \caption{Légende}
+  \label{fig:maFigure}
+\end{figure}
+
+\subsection{Références bibliographiques}
+ 
+Pour citer un article en latex il faut :
+\begin{enumerate}
+\item  trouver  le  fichier  .bib  associé  à  cet  article  (on  peut
+  généralement le trouve sur le site google
+  scholar) ;
+\item   copier   le   contenu   de  ce   fichier   dans   le   fichier
+  "bibliography.bib" ;
+\item citer ce fichier en  utilisant son identifiant (l'identifiant se
+  trouve au début du fichier .bib).
+\end{enumerate}
+
+Par  exemple, pour  créer la  référence~\cite{bertsimas2017optimal}, il
+faut taper :
+
+$\backslash$cite\{bertsimas2017optimal\}.
+
+
+
+\addcontentsline{toc}{chapter}{Bibliographie}
+
+%% Feuille de style bibliographique : monjfm.bst
+\bibliographystyle{apalike}
+\bibliography{bibliography}
+
+\end{document}

@@ -1,0 +1,9 @@
+Résumer dans ton rapport l'article doc/dunn2017Optimal.pdf.
+
+Insister sur la méthode de résolution
+- quels sont les problèmes d'optimisation résolus ?
+- quelle forme doit prendre les données ?
+- comment est déterminée la taille de l'arbre ?
+- comment sont déterminées les valeurs seuils utilisées dans les arbres de classification ?
+- quelles sont les restrictions ? (nombre de classes, types de données, ...)
+- quelles sont les paramètres et comment fixer leur valeur ?

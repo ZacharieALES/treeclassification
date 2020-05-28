@@ -39,7 +39,7 @@
 \thispagestyle{empty}
 {\Large
 \begin{center}
-Prénom NOM
+Quentin RAPILLY
 \vskip1cm
 
 %% Pour redéfinir la distance entre la boite et le texte
@@ -51,7 +51,7 @@ Prénom NOM
 %% (essayez donc de le commenter)
 $$\fbox{$
   \begin{array}{c}
-  \textbf{Titre}
+  \textbf{Étude des arbres de classification optimaux}
   \vphantom{\int_\int}
   \end{array}
   $}
@@ -78,6 +78,329 @@ Zacharie ALES
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Introduction :
 \chapter{Introduction}
+
+L'essor de l'intelligence artificielle aujourd'hui et son application dans de plus en plus de domaines pousse la recherche à trouver de nouvelles méthodes ou bien améliorer les techniques déjà existante. L'objectif étant généralement à partir des données que nous possédons, de construire un modèle permettant de prédire de l'information sur des observations futures.\\
+Une méthode très répandue est celle des \textbf{arbres de classification} qui consiste à construire un arbre à partir des données existante de tel sorte qu'en chaque noeud une dichotomie est faite selon la valeur d'une (approche uni-variée) ou plusieurs variables (approche multi-variée). Chaque feuille est associée à une des différentes classes du problème. On attribue donc une classe à une nouvelle observation en suivant dans l'arbre, le chemin correspondant aux valeurs des variables pour cette observation.\\
+L'avantage principale de cette méthode, est son interprétabilité. En effet, en suivant le chemin emprunté pour classer une observation on voit pour quelle raison (valeurs des variables) une direction a été prise plutôt qu'une autre et donc on peut identifier les caractéristiques d'une classe. Ainsi même si les arbres peuvent avoir des résultats moins bons que d'autres méthodes de classification (réseaux de neurones, ...) leur interprétabilité peut faire d'eux une méthode privilégiée dans certains domaines comme la médecine où les raisons d'une prise de décision peuvent avoir autant de poids que la décision elle même.\\
+Beaucoup de méthodes de construction d'arbre existent déjà mais l'article \textit{Optimal Classification Trees} de Dimitri Bertisimas et Jack Dunn met en lumière les faiblesses des méthodes existantes et propose une nouvelle façon de construire les arbres en transformant le problème en un problème linéaire en nombre entier (PLNE ou MIO en anglais).\\
+Dans le cadre de mon étude, j'avais pour mission de synthétiser les propos avancés dans cet article, mettre en place la méthode conseillée et la tester puis éventuellement tenter d'y apporter des améliorations ou de la robustesse. 
+
+\chapter{Synthèse de l'article}
+
+\section{Les faiblesses des algorithmes existant}
+
+Dès l'introduction de l'article, les auteurs nous font comprendre que l'origine de leurs travaux a été l'observation du problème suivant dans les méthodes les plus répandues aujourd'hui pour l'entraînement d'arbre de classification : \\
+Pour produire l'arbre de classification ces algorithmes (CART est celui le plus cité dans l'article et sert de comparaison dans l'étude des résultats) partent de la racine et introduisent une séparation qui va permettre de produire deux sous ensembles sur les données d'entraînement qui va minimiser un critère d'impureté (l'objectif est que les observations dans chaque ensemble soient celles qui se ressemblent le plus). On itère ensuite ce procédé sur les deux sous ensembles produits et ainsi de suite jusqu'à satisfaire un critère d'arrêt (le nombre d'observations au niveau d'un noeud correspond au minimum demandé ou bien toutes les observations dans un noeud appartiennent à la même classe). Chaque feuille de l'arbre est alors associée à la classe qui est majoritairement représentée au sein de celle ci.\\
+Le problème étant que ces algorithmes utilisés usuellement sont des \textbf{algorithmes gloutons}, c'est à dire qu'ils ne tentent pas de trouver l'optimum du problème global mais se contente de résoudre successivement des sous problèmes en considérant qu'en regroupant les solutions des sous problèmes on obtient une solution au problème principal satisfaisante. \textbf{Cette solution est en effet souvent efficace mais pas optimale}.\\
+Pour obtenir une solution optimale, il faudrait que toutes les séparations soient trouvées en une unique étape de sorte qu'une n'influence pas la suivante. L'objectif à optimiser est alors l'objectif global du problème : que la classification sur le jeu d'entraînement proposée par l'arbre soit la plus proche de la classification réelle (qu'il y ait le moins possible de prédictions erronées).\\
+L'article nous explique alors que cette idée n'est pas du tout nouvelle et a déjà été envisagée par la passé mais que les ressources matérielles et logicielles ne permettaient pas d'obtenir des résultats en un temps satisfaisant. Cependant, le gain considérable de vitesse de calcul dû à l'optimisation des solveurs pour les problèmes de type PLNE, tels que CPLEX (développé par IBM) ou Gurobi, mais aussi au progrès effectués sur les ressources de calcul, rendent aujourd'hui cette approche du problème envisageable.\\
+\vspace{0.5cm}
+
+\textit{Remarque : l'article mentionne aussi que les algorithmes usuels produisent souvent des arbres qui doivent être élagués (suppression de certains noeuds) afin de réduire leur complexité car certaines séparations peuvent s'avérer beaucoup plus utiles que d'autres. On apprend alors que la méthode proposée par la suite ne nécessite pas d'élagage ce qui en fait un avantage supplémentaire mais ceci est très peu développé donc nous n'en feront qu'une brève mention ici.}
+
+\section{La méthode proposée - Utilisation de la PLNE}
+\subsection{Notation usuelle pour les arbres de classification}
+
+De façon générale, dans le cas des problèmes d'arbres de classification, les données sont sous la forme suivante :\\
+Comme souvent en intelligence artificielle, on dispose d'un échantillon de \(n\) observations \((\mathbf{x_i},y_i)_{i=1,...,n}\) tel que pour tout \(i\), \(\mathbf{x_i}\) est un vecteur de \(\mathbb{R}^p\) qui contient les valeurs des \(p\) variables pour cette observation et \(y_i \in \{1,..,K\}\) représente la classe associée à cette observation.\\
+Sans perte de généralité, on suppose que \(\forall i, ~ \mathbf{x_i} \in [0,1]^p\) (cette transformation pouvant être effectuée simplement).\\
+
+\vspace{0.2cm}
+\textit{Remarque : on notera que toutes les variables sont quantitatives et donc que le modèle considéré dans cette étude ne permet pas de prendre en compte le cas de variables qualitatives}\\
+
+\vspace{0.2cm}
+Concernant l'arbre :
+\begin{itemize}
+    \item Si le noeud en cours de traitement est une feuille on se contente de lui associer une classe (souvent la classe représentée majoritairement par les observations qui finissent dans cette feuille)
+    \item Si le noeud n'est pas une feuille il est paramétré par \(\mathbf{a} \in {[0,1]}^p\) et \(b \in \mathbb{R}\). Pour une observation d'indice i, si \(\mathbf{a}^T\mathbf{x_i} < b\) alors on prend le chemin de gauche, et celui de droite dans l'autre cas (pour obtenir une approche uni-variée, il suffit que \(\mathbf{a}\) ne contienne qu'une composante non nulle).
+\end{itemize}
+
+\begin{figure}
+    \centering
+    \includegraphics[scale=0.8]{Images/classification_tree.png}
+    \caption{Exemple d'arbre de classification}
+    \label{classification_tree}
+\end{figure}
+
+Deux autres paramètres sont aussi souvent introduits dans ce genre de problèmes :
+\begin{itemize}
+    \item \(N_{min}\) qui correspond au nombre minimum d'observations qu'une feuille doit contenir.
+    \item \(\alpha\) qui est une façon de représenter la complexité associée à l'arbre. En fait, plus ce paramètre est élevé, plus le nombre de noeud élagués sera important.
+\end{itemize}
+
+\textbf{Le problème d'optimisation correspondant à trouver un arbre minimisant l'erreur de classification est donc le suivant :}
+\[
+\left\{
+  \begin{array}{rll}
+    \min_{T} & R_{X,Y}(T)+\alpha |T|\\
+    \mbox{s.c.} & N_{min} \leq N_X(l) 
+    & \forall l \in feuilles(T)\\
+  \end{array}
+\right.
+\]
+
+Dans lequel \(R_{X,Y}(T)\) correspond à l'erreur de classification de l'arbre \(T\) pour les données \((X,Y)\), \(|T|\) est le nombre de noeuds internes (non feuille) de l'arbre et \(N_X(l)\) est le nombre d'observation de \(X\) dans la feuille \(l\).\\
+On observe bien ici que le problème ne fait pas intervenir de notion d'impureté s'il est résolu en une unique étape.
+
+
+\subsection{Formulation sous forme d'un programme linéaire - Approche uni-variée}
+Avant de mettre le problème précédent sous forme d'un programme linéaire, l'article rappelle les prérequis que notre arbre doit remplir afin de s'assurer que dans la suite les variables et contraintes introduites répondent bien au problème initial.
+\begin{itemize}
+    \item On doit pouvoir déterminer si un noeud de l'arbre est une feuille ou un noeud interne.
+    \item Si un noeud est une feuille on doit lui attribuer une classe.
+    \item Si un noeud est interne, on doit choisir sur quelle(s) variable(s) le test doit être effectué et avec quel seuil (affecter une valeur aux paramètres \(\mathbf{a}\) et \(b\))
+    \item Chaque observation doit être associée à une feuille si l'on suit le cheminement défini par les étapes précédentes.
+\end{itemize}\\
+\vspace{0.5cm}
+
+On va maintenant présenter la formulation du problème linéaire permettant de répondre à toutes ces caractéristiques.\\
+On se donne alors \(D\) la profondeur maximale de l'arbre recherché, qui détermine donc aussi le nombre maximal de noeud dans \(T\) dans le cas d'un arbre binaire complet: \(2^{D+1}-1\) (tous les noeuds ne seront pas forcément utilisés, réduisant alors la complexité de l'arbre, le paramètre \(d_t\) introduit plus loin permet de l'expliciter).\\
+L'article introduit aussi les notations suivantes :
+\begin{itemize}
+    \item \( \forall t \in T, ~ p(t)\) est le parent de \(t\) dans l'arbre.
+    \item \( \forall t \in T, ~ A_L(t)\) (respectivement \(A_R(t)\)) correspond à tous les ancêtres de \(t\) pour lesquels le chemin de gauche (respectivement de droite) a été suivi pour rejoindre t.
+    \item \(\mathcal{T}_B=\{1,...,\lfloor |T|/2\rfloor\}\) qui correspond à l'ensemble des noeuds internes ("branch nodes" en anglais d'où le B)
+    \item \(\mathcal{T}_L=\{\lfloor |T|/2\rfloor+1,...,|T|\}\) qui correspond à l'ensemble des feuilles ("leaf nodes" en anglais d'où le L)
+\end{itemize}
+\\
+\vspace{0.5cm}
+
+Pour tout \(t \in \mathcal{T}_B\) on introduit les variables \(\mathbf{a}_t \in \mathbb{R}^p\) et \(b_t \in \mathbb{R}\). Cette première approche traitant le cas uni-varié, toutes les composantes de \(\mathbf{a}_t\) sont nulles sauf une qui vaut 1.\\
+De plus, en chaque noeud interne un indicateur binaire noté \(d_t\) détermine si le noeud \(t\) effectue une séparation ou non (et sera utile après pour calculer la complexité de l'arbre). Ainsi si \(d_t=0\) le noeud n'applique pas de coupure. Ce cas est modélisé par : \(\mathbf{a}_t=\mathbf{0}\) et \(b=0\). La contrainte de test n'est alors jamais satisfaite et quelque soit l'observation, on emprunte le chemin de droite issu de ce noeud. Les contraintes permettant de résumer l'ensemble de ces idées sont les suivantes :
+\begin{equation}
+     \sum_{j=1}^p a_{jt}=d_t,~ \forall t \in \mathcal{T}_B 
+\end{equation}
+\begin{equation}
+     a_{jt} \in \{0,1\},~ \forall j \in \{1,...,p\},~ \forall t \in \mathcal{T}_B 
+\end{equation}
+\begin{equation}
+     0 \leq b_t \leq d_t,~ \forall t \in \mathcal{T}_B 
+\end{equation}
+
+Ensuite, la contrainte suivante permet d'imposer que si un ancêtre de \(t\) n'effectue pas de séparation alors \(t\) non plus.
+\begin{equation}
+    d_t \leq d_{p(t)},~ \forall t \in \mathcal{T}_B 
+\end{equation}
+
+Il faut à présent mettre en place les contraintes qui permettent de gérer l'assignation de chaque observation à un sommet. Pour cela, on se sert des variables \(z_{it}\) qui vaut 1 si \(\mathbf{x}_i\) est dans la feuille \(t\) et 0 sinon, et \(l_t\) qui vaut 1 si \(t\) contient au moins une observation.
+On peut alors s'assurer que chaque feuille contient au moins \(N_{min}\) observations :
+\begin{equation}
+    z_{it} \leq l_t,~ \forall t \in \mathcal{T}_L, ~ \forall i \in \{1,...,n\}
+\end{equation}
+\begin{equation}
+    N_{min}l_t \leq \sum_{i=1}^n z_{it},~ \forall t \in \mathcal{T}_L
+\end{equation}
+Puis chaque observation ne pouvant être assignée qu'à une unique feuille :
+\begin{equation}
+    \sum_{t\in \mathcal{T}_L} z_{it} = 1,~ \forall i \in \{1,...,n\}
+\end{equation}
+
+Les contraintes qui suivent servent, quant à elles, à s'assurer que si une observation est assignée à une feuille alors les tests effectuées en parcourant le chemin jusqu'à cette feuille sont bien satisfait par les valeurs prises par les variables de cette observation.
+\begin{equation}
+    \mathbf{a}_m^T\mathbf{x}_i < b_m + M_1(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\end{equation}
+
+\begin{equation}
+     b_m - M_2(1-z_{it}) \leq \mathbf{a}_m^T\mathbf{x}_i,~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_R(t)
+\end{equation}
+
+Cependant, dans un problème linéaire, on ne peut pas faire intervenir d'inégalité stricte ainsi la contrainte est transformée (2.8) en :
+
+\begin{equation}
+    \mathbf{a}_m^T\mathbf{x}_i + \epsilon \leq b_m + M_1(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\end{equation}
+
+dans laquelle \(\epsilon\) doit être rendu aussi petit que possible. Cependant en étant trop petit, des instabilités numériques peuvent survenir et s'il est trop grand, la faisabilité du problème est affectée. Pour résoudre ce problème, on ne prend pas uniquement un réel mais un vecteur tel que :
+\begin{equation}
+    \epsilon_j=min\{x_j^{i_1}-x_j^{i_2} ~|~ (i_1,i_2) \in \{1,...,n\}^2, ~ i_1 \ne i_2 \}
+\end{equation}
+
+On obtient alors la contrainte : 
+\begin{equation}
+    \mathbf{a}_m^T(\mathbf{x}_i + \epsilon) \leq b_m + M_1(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\end{equation}
+
+Il ne faut plus maintenant que préciser les valeurs de \(M_1\) et \(M_2\) qui doivent être choisies de sorte que les contraintes soient toujours vérifiées dans le cas où \(z_{it} \ne 1\). Il suffit alors de prendre \(M_1=1+\epsilon_{max}\) où \(\epsilon_{max}\) est la plus grande composante de \(\epsilon\) et \(M_2=1\).\\
+On obtient finalement : 
+\begin{equation}
+    \mathbf{a}_m^T(\mathbf{x}_i + \epsilon) \leq b_m + (1+\epsilon_{max})(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\end{equation}
+\begin{equation}
+    b_m - (1-z_{it}) \leq \mathbf{a}_m^T\mathbf{x}_i,~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_R(t)
+\end{equation}
+
+\vspace{0.5cm}
+On s'intéresse enfin à l'objectif qui est de minimiser l'erreur de classification. On souhaite qu'une erreur de prédiction coûte 1 et une prédiction correcte ne coûte rien. On introduit pour cela la matrice \(\mathbf{Y}\) définie par :
+\[
+Y_{ik}=
+\left \{
+\begin{tabular}{rl}
+     +1 & \mbox{if } y_i=k \\
+     -1 & \mbox{sinon} 
+\end{tabular}
+\right., ~ \forall k \in \{1,...,K\},~ \forall i\in \{1,...,n\}
+\]
+
+On introduit ensuite \(N_{kt}\), le nombre d'observations de classe \(k\) dans le noeud \(t\) et \(N_t\) le nombre total de points dans \(t\) dont les valeurs sont fixées par :
+\begin{equation}
+    N_{kt}=\frac{1}{2}\sum_{i=1}^n(1+Y_{ik})z_{it}, ~~\forall k \in \{1,...,K\},~~ \forall t \in \mathcal{T}_L
+\end{equation}
+\begin{equation}
+    N_t=\sum_{i=1}^n z_{it}, ~~ \forall t \in \mathcal{T}_L
+\end{equation}
+Ensuite chaque feuille doit se voir attribuer une classe \(c_t \in \{1,...,K\}\) tel que :
+\begin{equation}
+    c_t=\mbox{arg max}_{k=1,...,K}{N_{kt}}
+\end{equation}
+
+qui sera finalement introduite dans le problème sous la forme \(c_{kt}\) qui vaut 1 si la feuille \(t\) est associée à la classe k et 0 sinon. Pour s'assurer que chaque feuille ne soit associée qu'à une classe on introduit la contrainte :
+
+\begin{equation}
+    \sum_{k=1}^K c_{kt} =l_t, ~~ \forall t \in \mathcal{T}_L
+\end{equation}
+
+Finalement on attribue à chaque feuille une grandeur \(L_t\) qui quantifie l'erreur de classification, correspondant aux nombre total d'observations dans la feuille diminué du nombre d'observation de la classe attribuée à la feuille.
+\begin{equation}
+    L_t=N_t-\mbox{max}_{k=1,...,K}\{N_{kt}\}=\mbox{min}_{k=1,...,K}\{N_t-N_{kt}\}
+\end{equation}
+Que l'on peut aisément linéariser en :
+\begin{equation}
+    N_t-N{kt}-M(1-c_{kt}) \leq L_t, ~~ \forall k \in \{1,...,K\},~~\forall t \in \mathcal{T}_L
+\end{equation}
+\begin{equation}
+    L_t \leq N_t-N_{kt}+Mc_{kt}, ~~ \forall k \in \{1,...,K\},~~\forall t \in \mathcal{T}_L
+\end{equation}
+\begin{equation}
+    0 \leq L_t ,~~\forall t \in
+\end{equation}
+Comme précédemment, on choisit la valeur du paramètre \(M\) assez grand pour que la contrainte soit toujours vérifiée quand \(c_{kt}=0\), \(M=n\) est la plus petite valeur possible.\\
+
+La fonction de coût à optimiser peut finalement être écrite sous la forme suivante :
+\begin{equation}
+    \mbox{min} ~ \frac{1}{\hat{L}}\sum_{t\in \mathcal{T}_L}L_t + \alpha \sum_{t\in \mathcal{T}_n} d_t
+\end{equation}
+Où \(\hat{L}\) est le nombre d'éléments dans la classe la plus représentée (l'introduction de cette variable permet de rendre la fonction de coût indépendante de la taille de l'échantillon). Et où la somme des \(d_t\) permet de pénaliser un arbre trop complexe, car plus le nombre de séparations dans l'arbre est important plus cette somme est grande.\\
+\textbf{On dispose alors de toutes les variables et contraintes nécessaires à la résolution du problème il ne reste plus qu'à le résoudre.}
+
+\paragraph{Utilisation d'une initialisation adéquat}
+Les auteurs indiquent que pour la plupart des solveurs de PLNE, injecter initialement dans le solveur une solution non optimale mais réalisable réduit généralement drastiquement le temps de calcul pour arriver à une solution optimale. Injecter la solution au problème trouvée par l'algorithme CART dans le cas des arbres de classification (en ayant élagué la solution si elle ne respecte pas le critère de profondeur) réduit grandement le temps de calcul d'une solution optimale via la formulation précédente.\\
+Une autre façon de trouver une solution d'initialisation peut être de prendre la solution trouvée pour une profondeur \(D-1\) qui reste valide si l'on cherche un arbre de profondeur \(D\) mais n'est plus optimale. 
+
+\paragraph{Choix des paramètres et algorithmes} Les paramètres à choisir dans la résolution du problèmes sont donc au nombre de trois :
+\begin{enumerate}
+    \item La profondeur maximale de l'arbre recherchée \(D\)
+    \item Le niveau de complexité de l'arbre recherché \(\alpha\)
+    \item Le nombre minimal d'observation par feuille \(N_{min}\)
+\end{enumerate}
+La taille de l'arbre recherché ayant un effet non négligeable sur la difficulté du problème et au vu de la remarque faite concernant les solutions d'initialisation, le fonctionnement suivant est proposé : une taille \(D_{max}\) est choisie. Puis on commence par chercher une solution sous la forme d'un arbre de taille 2, dont on se sert comme initialisation pour la recherche d'un arbre de taille 3, et ceci récursivement jusqu'à la taille \(D_{max}\).\\
+Au lieu de fixer une valeur pour \(\alpha\) qui relèverait plus du tâtonnement, l'article propose de réécrire l'objectif :
+\[\mbox{min} ~ \frac{1}{\hat{L}}\sum_{t\in \mathcal{T}_L}L_t + \alpha \sum_{t\in \mathcal{T}_n} d_t\]
+sous la forme :
+\[\mbox{min} ~ \frac{1}{\hat{L}}\sum_{t\in \mathcal{T}_L}L_t\]
+\[ \sum_{t\in \mathcal{T}_n} d_t \leq C\]
+où \(C\) est alors une constante en lien avec \(\alpha\) mais dont le domaine de définition est beaucoup plus simple puisque \(C \in \{1,...,2^D-1\}\) et est à valeur entière. On peut donc automatiser la recherche du C optimal avec une boucle.\\
+L'algorithme final est le suivant : 
+\begin{enumerate}
+    \item Fixer les valeurs de \(D_{max}\) et \(N_{min}\).
+    \item Pour \(D\) allant de 1 à \(D_{max}\):
+    \begin{itemize}
+        \item Optionnel : Chercher une solution avec l'algorithme pour CART avec \(\alpha=0\) en l'élaguant à la profondeur D et l'ajouter à l'ensemble des initialisations possibles.
+        \item Pour \(C \in \{1,...,2^D-1\}\) :
+        \begin{enumerate}
+            \item Choisir l'initialisation qui donne la plus faible erreur parmi l'ensemble de celles disponibles.
+            \item Résoudre le problème de PLNE pour les \(C\) et \(D\) actuels et avec l'initialisation choisie.
+            \item Ajouter la solution trouvée à l'ensemble des initialisations possibles.
+        \end{enumerate}
+    \end{itemize}
+    \item Identifier la solution optimale parmi toutes celles disponibles.
+\end{enumerate}
+
+Finalement les seules paramètres de l'algorithme sont \(D_{max}\) et \(N_{min}\).
+
+\subsection{Formulation sous forme d'un problème linéaire - Approche multi-variée}
+Pour obtenir une approche muti-variée du problème précédent, le changement principal à effectuer est le suivant : les \(\mathbf{a}_t\) ne sont plus des vecteurs dont un seul élément non nul vaut 1 mais sont maintenant des vecteurs de \([-1,1]^p \). De ce fait la contrainte (2.1) doit être modifiée en :
+\[\sum_{j=1}^p |a_{jt}|=d_t,~ \forall t \in \mathcal{T}_B \]
+qui doit être linéarisé en faisant disparaître la valeur absolue. Ceci pouvant être fait en introduisant la variable \(\hat{\mathbf{a}}_t\) vérifiant :
+\[\sum_{j=1}^p \hat{a}_{jt}=d_t,~ \forall t \in \mathcal{T}_B \]
+\[a_{jt} \leq \hat{a}_{jt},~~ \forall j \in \{1,...,p\},~~ \forall t \in \mathcal{T}_B\]
+\[-a_{jt} \leq \hat{a}_{jt},~~ \forall j \in \{1,...,p\},~~ \forall t \in \mathcal{T}_B\]
+Il faut aussi changer la contrainte relative à \(b_t\) comme \(\mathbf{a}_m^T\mathbf{x}_i\) appartient maintenant à \([-1,1]\) et non plus \([0,1]\) :
+\[
+-d_t \leq b_t \leq d_t, ~~ \forallt \in \mathcal{T}_B
+\]
+
+De même, les valeurs de \(M_1\) et \(M_2\) doivent être changées pour satisfaire la contrainte dans le cas où \(z_{it}=0\). On obtient alors les contraintes :
+\[
+    \mathbf{a}_m^T\mathbf{x}_i < b_m + 2(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\]
+\[
+    b_m - 2(1-z_{it}) \leq \mathbf{a}_m^T\mathbf{x}_i ,~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_R(t)
+\]
+
+Pour la même raison que précédemment, concernant les inégalités strictes, la première des deux familles de contraintes devient alors :
+
+\[
+    \mathbf{a}_m^T\mathbf{x}_i + \mu \leq b_m + 2(1-z_{it}),~~ \forall i \in \{1,...,n\},~~ \forall t \in \mathcal{T}_L,~~ \forall m \in A_L(t)
+\]
+Mais ici aucune valeur optimale de \(\mu\) ne peut être prise et l'article conseille donc de prendre \(\mu=0.005\) qui est une valeur assez petite mais ne causant pas de problème numérique.\\
+\vspace{0.5cm}
+
+Finalement, il faut changer la façon dont on pénalise la complexité d'un arbre. En effet plus un noeud fait intervenir de variables dans sa séparation plus celle-ci est considérée complexe. Pour cela on introduit les variables binaires \(s_{jt}\) qui déterminent si la séparation du noeud \(t\) fait intervenir la variable \(j\). Les contraintes à appliquer sont les suivantes :
+\[
+-s_{jt} \leq a_{jt}  \leq s_{jt}, ~~ \forall j \in \{1,...,p\},~~\forall t \in \mathcal{T}_B
+\]
+\[
+s_{jt} \leq d_{t},  ~~ \forall j \in \{1,...,p\},~~\forall t \in \mathcal{T}_B
+\]
+\[
+d_t \leq \sum_{j=1}^p s_{jt},~~ \forall  t \in \mathcal{T}_B
+\]
+Les deux dernières familles servant à assurer la comptabilité entre \(s_{jt}\) et \(d_{t}\).\\
+Finalement la fonction de coût à optimiser dans ce problème est la suivante :
+\[
+\mbox{min} ~ \frac{1}{\hat{L}}\sum_{t\in \mathcal{T}_L}L_t + \alpha \sum_{t\in \mathcal{T}_n} \sum_{j=1}^p s_{jt}
+\]
+
+\paragraph{Initialisation dans le cas multi-variée} Dans ce cas ci, les méthodes d'initialisation précédente fournissent une borne de moins bonne qualité. L'article propose comme alternative d'effectuer une application récursive du programme linéaire précédent en chaque noeud depuis la racine fixant D=1 et en agissant récursivement de la même façon que les heuristiques utilisées usuellement pour créer des arbres de classification. Dans ce cas, le problème à résoudre est bien moins complexe et ainsi le solveur n'a besoin que de très peu de temps pour trouver une solution. On obtient ainsi une solution gloutonne approchée qui est une bonne initialisation pour lancer l'algorithme sur le problème entier.
+
+\paragraph{Algorithme dans le cas de multi-varié} Le problème majeur avec cette approche est que la solution employée précédemment pour ne pas avoir à choisir de constante \(\alpha\) en utilisant une boucle sur la constante \(C\) n'est plus aussi efficace si \(p\) est grand car le nouveau domaine de définition de \(C\) en dépend linéairement. Dans ce cas il est préférable de donner nous même un ensemble de valeur à tester pour \(\alpha\).\\
+Cette différence mise à part, l'algorithme est exactement le même que dans la cas précédent.
+
+\section{Résultats de leur étude}
+Afin de tester leur algorithme, Dimitris Bertimas et Jack Dunn ont mis en place deux études comparative de leur algorithme avec l'algorithme CART, évoqué précédemment.
+
+\paragraph{Analyse de l'influence de la taille des données, des paramètres de l'algorithme et du bruit éventuel dans les données} La première partie concernant les résultats de leur algorithme est la suivante : un arbre aléatoire, appelé \textit{Arbre de vérité} est généré, ainsi qu'une population d'observation. A chaque individu, on associe une classe grâce à l'arbre de vérité et on dispose ainsi d'une population d'observations et de la classe associée à chacune d'elle. L'objectif étant d'utiliser une partie de cette population (échantillon d'entraînement) afin de trouver un arbre via CART et via l'algorithme décrit ici, nommé OCT (pour Optimal Classification Tree).
+Et de tester le pourcentage d'erreur de classification sur le reste de l'échantillon pour comparer les performances des deux méthodes.\\
+Des tableaux comparatifs présentent alors les résultats sur l'influence de la profondeur de l'arbre de vérité, la taille de l'échantillon d'entraînement, du bruit parmi l'attribution des classes ou encore du bruit sur les variables des observations alors que les classes étaient déjà attribuée.\\
+Dans tous les cas, l'étude montre que OCT s'en sort au moins aussi bien que CART et sont meilleurs que lui dans la majeure partie des situations. On apprend aussi qu'il n'y a pas de sur-apprentissage de l'échantillon d'entraînement comme les très bons résultats obtenus pas OCT sont réalisé sur l'échantillon test qui n'est pas utilisé lors de la phase d'apprentissage (alors qu'on reproche souvent aux méthodes d'optimisation de faire du sur-apprentissage).\\
+Le plus intéressant à noter est que OCT est légèrement meilleur sur les jeux de donnée conséquent mais bien meilleur sur des ensembles d'observations peu important.\\
+Les auteurs de l'article ont aussi pu observer que les caractéristiques de l'arbre généré par leur méthode (nombre de noeud, profondeur de l'arbre) étaient souvent beaucoup plus proches de celles de l'arbre de vérité que l'arbre généré par CART.\\
+Cependant, la méthode ne permet pas d'obtenir des arbres en un temps raisonnable pour des jeux de données de trop grande taille : \(n\) grand, profondeur de l'arbre supérieur à 4 (et donc un maximum de 16 classes peut être prédit).
+
+\paragraph{Comparaison sur des données de la vie courante} Une deuxième étude a été faite, cette fois ci non pas sur des données générées aléatoirement mais sur des échantillons de données provenant de situations réelles et disponible en ligne. Là aussi le résultat est flagrant, OCT bat CART sur une grande partie des jeux de données testés (mais pas à chaque fois, le problème étant que OCT est contraint au niveau de la profondeur de l'arbre contrairement à CART ; cependant OCT est souvent très proche de CART même quand il perd en utilisant pourtant des arbres bien moins profond).
+
+\paragraph{Comparaison avec un algorithme de forêts aléatoires} Un des meilleurs algorithmes de création d'arbre de classification est celui des forêts aléatoires qui consiste à générer un grand nombre d'arbres en fusionner les résultats en attribuant un poids à chacun en fonction de la pertinence de la classification donnée par cette arbre. Sur les jeux de données de la vie réelle, cet algorithme est meilleur qu'OCT de manière globale même si celui ci arrive à donner des résultats presque aussi bon pour les jeux de données de petite taille. Ce qui est un résultat intéressant particulièrement pour l'interprétabilité vu qu'OCT n'utilise qu'une unique arbre tandis que Random Forest en utilise 100 dans le cas de cette étude.
+
+\paragraph{Conclusion} L'étude précédente des résultats montre que la méthode apportée par l'article étudié donne une solution très efficace à la recherche d'arbre de classification en passant non plus par une heuristique mais une optimisation du problème globale.
+
+
+\chapter{Mise en place de l'algorithme}
+
+\section{Mes choix pour la mise en application de l'algorithme}
+
+\chapter{Améliorations}
+
+Si le jeu de données est trop grand, s'inspirer de Random Forest en faisant plusieurs arbres avec des sous ensembles disjoints du jeu de donnée pour ensuite faire un vote pondéré de la classe choisie.
+
+\end{document}
+
+
+
+
+
+
+
+
 
 \section{Exemples}
 
@@ -108,7 +431,6 @@ Text normal.
 \textit{Texte italique.}
 \textbf{Texte en gras.}
 \underline{Texte souligné.}
-
 \end{verbatim}
 \end{minipage}
 \subsection{Listes}
@@ -195,12 +517,10 @@ Référence à cette équation : \eqref{eq:monEquation}.
 
 \begin{verbatim}
 Exemple d'équation numérotée :
-
 \begin{equation}
   x = y
   \label{eq:monEquation}
 \end{equation}
-
 Référence à cette équation : 
 \eqref{eq:monEquation}.
 \end{verbatim}
@@ -237,12 +557,9 @@ Référence à cette équation :
   \textbf{Titre 1} 
   & \textbf{Titre 2} 
   & \textbf{Titre 3} \\
-
   \hline
   c1 & c2 & c3 \\
-
   c4 & c5 & c6\\
-
   \hline
 \end{tabular}
 \end{verbatim}
@@ -300,10 +617,8 @@ légende. C'est le cas de la table~\ref{tab:ex}.
 
 \begin{verbatim}
 \begin{table}[h!]
-
   \centering
   % ... contenu de la table
-
   \caption{Exemple de table.}
   \label{tab:ex}
 \end{table}
@@ -332,10 +647,8 @@ légende. C'est le cas de la table~\ref{tab:ex}.
 $(P)\left\{
   \begin{array}{rll}
     \min_{x}& \sum_{i=1}^n w_i x_i\\
-
     \mbox{s.c.} & p_{i,j} x_i \leq B 
     & \forall j\in\{1, ..., m\}\\
-
     & x_i\in\mathbb N
   \end{array}
 \right.$
@@ -348,10 +661,8 @@ $(P)\left\{
 $(P)\left\{
   \begin{array}{rll}
     \min_{x}& \sum_{i=1}^n w_i x_i\\
-
     \mbox{s.c.} & p_{i,j} x_i \leq B 
     & \forall j\in\{1, ..., m\}\\
-
     & x_i\in\mathbb N
   \end{array}
 \right.$
@@ -452,8 +763,6 @@ Pour citer un article en latex il faut :
 %% Feuille de style bibliographique : monjfm.bst
 \bibliographystyle{apalike}
 \bibliography{bibliography}
-
-\end{document}
 
 
 \begin{minipage}[t]{.45\linewidth}

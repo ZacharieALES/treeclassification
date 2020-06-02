@@ -41,14 +41,30 @@ function readDataFile(inputFile::String,header::Bool=true,separator::Char=" ")
             X[i,j]=m*(X[i,j]-p)
         end
     end
+
+
     return(X,Y)
 end
 
 
 mutable struct Tree
-    D
-    p
-    a
-    b
+    D::Int64
+    a::Array{Float64,2}
+    b::Array{Float64,1}
+    c::Array{Int64,1}
+    missclassification::Int64
+
+    function Tree()
+        return new()
+    end
 end
 
+function Tree(D::Int64,a::Array{Float64,2},b::Array{Float64,1},c::Array{Int64,1},missclassification::Int64)
+    this=Tree()
+    this.D=D
+    this.a=a
+    this.b=b
+    this.c=c
+    this.missclassification=missclassification
+    return(this)
+end

@@ -33,7 +33,7 @@ function find_p(x::Int64)
 end 
 
 
-function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,warm_start::Tree=nothing,alpha::Float64=0,H::Bool=false)
+function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,warm_start::Tree=nothing,H::Bool=false,alpha::Float64=0)
     n=length(Y)
     p=length(X[1])
 
@@ -149,7 +149,17 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
         @objective(m, Min, (1/L_hat)*sum(L[t] for t in 1:n_l))
     end
 
-    return(m)
+    final_c=zeros(Int64,n)
+    n_l=2^D
+    for t in 1:n_l
+        k=1
+        while value(m.c[k,t])!=1
+            k+1
+        end
+        final_c[i]=k
+    end
+
+    return(Tree(D,value.(m.a),value.(m.b),final_c   ))
 end
 
 function score(T::Tree,X::Array{Float64,2},Y::Array{Int64,1})
@@ -159,15 +169,7 @@ function score(T::Tree,X::Array{Float64,2},Y::Array{Int64,1})
     p=length(X[1])
     max=2^D
     for i in 1:n
-        node=1
-        while node<max
-            if sum(T.a[j,node]*X[i,j] for j in 1:p)<T.b[node]
-                node=2*node
-            else
-                node=2*node+1
-            end
-        end
-        if T.c[node-max]!=Y[i]
+        if predict_class(T,X[i,:])!=Y[i]
             s+=1
         end
     end
@@ -175,44 +177,36 @@ function score(T::Tree,X::Array{Float64,2},Y::Array{Int64,1})
 end
 
 
-function indice_best_tree(warm_start_list::Array{Tree,1})
+function indice_best_tree(warm_start_list::Array{(Tree,Int64),1})
     i_min=1
-    min=warm_start_list[1].missclassification
+    min=warm_start_list[1,2]
     for i in 2:length(warm_start_list)
-        if warm_start_list[1].missclassification<min
+        if warm_start_list[i,2]<min
             i_min=i
-            min=warm_start_list[i].missclassification
+            min=warm_start_list[i,2]
         end
     end
     return(i_min)
 end
 
-function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false)
+function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha::Array{Float64,1})
     warm_start_list=[]
     n=length(Y)
     for D in 1:D_max
         for C in 1:2^D-1
             if warm_start_list==[]
-                m=classification_tree_MIO(D,N_Min,C,X,Y,K)
+                new_tree=classification_tree_MIO(D,N_Min,C,X,Y,K)
             else
                 i=indice_best_tree(warm_start_list)
-                m=classification_tree_MIO(D,N_Min,C,X,Y,K,warm_start_list[i])
+                new_tree=classification_tree_MIO(D,N_Min,C,X,Y,K,warm_start_list[i,1])
             end
 
             #create the c form used in Tree struct
-            c=zeros(Int64,n)
-            n_l=2^D
-            for t in 1:n_l
-                k=1
-                while value(m.c[k,t])!=1
-                    k+1
-                end
-                c[i]=k
-            end
             
-            new_tree=Tree(D,value.(m.a),value.(m.b),value.(m.c),0)
-            new_tree.missclassification=score(new_tree,X,Y)
-            append!(warm_start_list,new_tree)
+            
+            missclassification=score(new_tree,X,Y)
+            append!(warm_start_list,(new_tree,missclassification))
         end
     end
+    return(warm_start_list[indice_best_tree[warm_start_list]])
 end

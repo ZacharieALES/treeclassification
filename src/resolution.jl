@@ -55,10 +55,10 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
     end
 
 
-    eps_max=0
+    eps_min=1
     for j in 1:p
-        if eps[j]>eps_max
-            eps_max=eps[j]
+        if eps[j]<eps_min
+            eps_min=eps[j]
         end
     end
 
@@ -67,10 +67,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
         Count_class[Y[i]]+=1
     end
 
-    println(eps)
-    println(eps_max)
     
-
     L_hat=Count_class[1]
     for k in 2:K
         if Count_class[k]>L_hat
@@ -78,7 +75,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
         end
     end 
 
-    model=Model(with_optimizer(CPLEX.Optimizer))
+    model=Model(CPLEX.Optimizer)
 
     n_l=2^D #Leaves number
     n_b=2^D-1 #Branch nodes number
@@ -89,45 +86,21 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
     @variable(model, c[1:K,1:n_l],Bin)
     @variable(model, z[1:n,1:n_l],Bin)
     if H
-        @variable(model, a[1:n_b,1:p],Float)
-        @variable(model, hat_a[1:n_b,1:p],Float)
-        @variable(model, s[1:n_b,1:p],Bin)
+        @variable(model, a[1:p,1:n_b],Float)
+        @variable(model, hat_a[1:p,1:n_b],Float)
+        @variable(model, s[1:p,1:n_b],Bin)
     else
-        @variable(model, a[1:n_b,1:p],Bin)
+        @variable(model, a[1:p,1:n_b],Bin)
     end
-    @variable(model, b[1:n_b]>=0)  #vérifier que c'est bien un float puis faire pareil pour les autres
+    @variable(model, b[1:n_b])  #vérifier que c'est bien un float puis faire pareil pour les autres
     @variable(model, d[1:n_b],Bin)
     @variable(model, l[1:n_l],Bin)
 
 
-    @constraint(model, [k in 1:K, t in 1:n_l], L[t] >= N[t]-N_k[k,t]-n*(1-c[k,t]))
-    @constraint(model, [k in 1:K, t in 1:n_l], L[t] <= N[t]-N_k[k,t]+n*c[k,t])
-    @constraint(model, [t in 1:n_l], L[t]>=0)
-    @constraint(model, [k in 1:K, t in 1:n_l], N_k[k,t] == (1/2)*(sum((1+Yk[i,k])*z[i,t] for i in 1:n)))
-    @constraint(model, [t in 1:n_l], N[t] == sum(z[i,t] for i in 1:n))
-    @constraint(model, [t in 1:n_l], l[t] == sum(c[k,t] for k in 1:K))
-        
-    mu=0.005
-
-    for t in 1:n_l
-        (Al,Ar)=find_Al_Ar(t+n_b)
-        print("t = ")
-        println(t)
-        println(Al)
-        println(Ar)
-        if H
-            @constraint(model, [i in 1:n, m in Ar], sum(a[m,j]*X[i,j] for j in 1:p) >= b[m]-2*(1-z[i,t]))
-            @constraint(model, [i in 1:n, m in Al], sum(a[m,j]*X[i,j] for j in 1:p) +mu <= b[m]+(2+mu)*(1-z[i,t]))
-        else
-            @constraint(model, [i in 1:n, m in Ar], sum(a[m,j]*X[i,j] for j in 1:p) >= b[m]-(1-z[i,t]))
-            @constraint(model, [i in 1:n, m in Al], sum(a[m,j]*(X[i,j]+eps[j]) for j in 1:p) <= b[m]+(1+eps_max)*(1-z[i,t]))
-        end
-    end
-
     @constraint(model, [i in 1:n], sum(z[i,t] for t in 1:n_l)==1)
     @constraint(model, [i in 1:n, t in 1:n_l], z[i,t]<=l[t])
     @constraint(model, [t in 1:n_l], sum(z[i,t] for i in 1:n) >= N_min*l[t])
-    @constraint(model, [t in 1:n_b], sum(a[t,j] for j in 1:p)==d[t])
+    @constraint(model, [t in 1:n_b], sum(a[j,t] for j in 1:p)==d[t])  
     if H
         @constraint(model, [t in 1:n_b], -d[t] <= b[t])
     else
@@ -147,12 +120,40 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
         @constraint(model, [t in 1:n_b], sum(s[j,t] for j in 1:p) >= d[t])
     end
 
+
+    @constraint(model, [k in 1:K, t in 1:n_l], L[t] >= N[t]-N_k[k,t]-n*(1-c[k,t]))
+    @constraint(model, [k in 1:K, t in 1:n_l], L[t] <= N[t]-N_k[k,t]+n*c[k,t])
+    @constraint(model, [t in 1:n_l], L[t]>=0)
+    @constraint(model, [k in 1:K, t in 1:n_l], N_k[k,t] == (1/2)*(sum((1+Yk[i,k])*z[i,t] for i in 1:n)))
+    @constraint(model, [t in 1:n_l], N[t] == sum(z[i,t] for i in 1:n))
+    @constraint(model, [t in 1:n_l], l[t] == sum(c[k,t] for k in 1:K))
+        
+    mu=0.005
+
+    for t in 1:n_l
+        (Al,Ar)=find_Al_Ar(t+n_b)
+        
+        if H
+            @constraint(model, [i in 1:n,m in Ar], sum(a[j,m]*X[i,j] for j in 1:p) >= b[m]-2*(1-z[i,t]))
+            @constraint(model, [i in 1:n,m in Al], sum(a[j,m]*X[i,j] for j in 1:p) +mu <= b[m]+(2+mu)*(1-z[i,t]))
+        else
+            @constraint(model,[i in 1:n,m in Ar], sum(a[j,m]*X[i,j] for j in 1:p) >= b[m]-(1-z[i,t]))
+            @constraint(model,[i in 1:n,m in Al], sum(a[j,m]*(X[i,j]) for j in 1:p) + eps_min <= b[m]+(1+eps_min)*(1-z[i,t]))
+        end
+    end
+
+
+
     if warm_start.D !=0
         D_tree=warm_start.D
         n_b_tree=2^D_tree-1
         n_l_tree=2^D_tree
-        set_start_value(a[1:n_b_tree,1:p],warm_start.a)
-        set_start_value(b[1:n_b_tree],warm_start.b)
+        for t in 1:n_b_tree
+            set_start_value(b[t],warm_start.b[t])
+            for j in 1:p
+                set_start_value(a[j,t],warm_start.a[j,t])
+            end
+        end
     end
 
     if H
@@ -167,9 +168,9 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
     final_c=zeros(Int64,n_l)
     n_l=2^D
     for t in 1:n_l
-        if value(l[t])==1
+        if round(value(l[t]))==1
             k=1
-            while value(c[k,t])!=1
+            while round(value(c[k,t]))!=1
                 k=k+1
             end
             final_c[t]=k
@@ -178,7 +179,10 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
         end
     end
 
-    return(Tree(D,value.(a),value.(b),final_c))
+    
+
+    #return(model)
+    return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l))
 
 end
 
@@ -197,36 +201,34 @@ function score(T::Tree,X::Array{Float64,2},Y::Array{Int64,1})
 end
 
 
-function indice_best_tree(warm_start_list::Array{Tuple{Tree,Int64},1})
+function indice_min(liste)
     i_min=1
-    min=warm_start_list[1,2]
-    for i in 2:length(warm_start_list)
-        if warm_start_list[i,2]<min
+    min=liste[1]
+    for i in 2:length(liste)
+        if liste[i]<min
             i_min=i
-            min=warm_start_list[i,2]
+            min=liste[i]
         end
     end
     return(i_min)
 end
 
-function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha::Array{Float64,1}=[0])
-    warm_start_list=[]
+function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha::Array{Float64,1}=[0.0])
+    warm_start_list=Tree[]
+    miss_list=zeros(Int64,0)
     n=length(Y)
     for D in 1:D_max
         for C in 1:2^D-1
             if warm_start_list==[]
-                new_tree=classification_tree_MIO(D,N_Min,C,X,Y,K)
+                new_tree,missclassification=classification_tree_MIO(D,N_Min,C,X,Y,K)
             else
-                i=indice_best_tree(warm_start_list)
-                new_tree=classification_tree_MIO(D,N_Min,C,X,Y,K,warm_start_list[i,1])
+                i=indice_min(miss_list)
+                new_tree,missclassification=classification_tree_MIO(D,N_Min,C,X,Y,K,warm_start_list[i])
             end
-
-            #create the c form used in Tree struct
             
-            
-            missclassification=score(new_tree,X,Y)
-            append!(warm_start_list,(new_tree,missclassification))
+            append!(warm_start_list,[new_tree])
+            append!(miss_list,[missclassification])
         end
     end
-    return(warm_start_list[indice_best_tree[warm_start_list]])
+    return(warm_start_list[indice_min(miss_list)])
 end

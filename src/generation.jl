@@ -51,3 +51,11 @@ function generate_Y(T::Tree,X::Array{Float64,2})
     end
     return(Y)
 end
+
+function generate_X_Y(D::Int64,p::Int64,K::Int64,n::Int64,H::Bool=false)
+    T=generate_Tree(D,p,K,H)
+    X=generate_X(n,p)
+    Y=generate_Y(T,X)
+
+    return(X,Y)
+end

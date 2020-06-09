@@ -1,3 +1,4 @@
+include("Tree.jl")
 """
 Read a data file and create an array X containing the features and Y containing the class labels
 """
@@ -46,33 +47,17 @@ function readDataFile(inputFile::String,header::Bool=true,separator::Char=" ")
     return(X,Y)
 end
 
-
-mutable struct Tree
-    D::Int64
-    a::Array{Float64,2}
-    b::Array{Float64,1}
-    c::Array{Int64,1}
-
-    function Tree()
-        return new()
-    end
+function read_X_Y_file(inputFile::String)
+    include(inputFile)
 end
 
-function Tree(D::Int64,a::Array{Float64,2},b::Array{Float64,1},c::Array{Int64,1})
-    this=Tree()
-    this.D=D
-    this.a=a
-    this.b=b
-    this.c=c
-    return(this)
+function save_X_Y(outputFile::String,X,Y)
+    writer=open(outputFile,"w")
+    print(writer,"X=")
+    println(writer,X)
+    println(writer,"Y=")
+    println(writer,Y)
+    close(writer)
 end
 
 
-function null_Tree()
-    this=Tree()
-    this.D=0
-    this.a=zeros(Float64,0,0)
-    this.b=zeros(Float64,0)
-    this.c=zeros(Int64,0)
-    return(this)
-end

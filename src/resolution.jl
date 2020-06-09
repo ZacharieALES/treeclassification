@@ -33,7 +33,7 @@ function find_p(x::Int64)
 end 
 
 
-function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0)
+function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false)
     n=length(Y)
     p=length(X[1,:])
     Yk=-ones(Int64,n,K)
@@ -77,6 +77,9 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
 
     model=Model(CPLEX.Optimizer)
 
+    set_silent(model)
+    set_time_limit_sec(model,180)
+
     n_l=2^D #Leaves number
     n_b=2^D-1 #Branch nodes number
 
@@ -86,8 +89,8 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
     @variable(model, c[1:K,1:n_l],Bin)
     @variable(model, z[1:n,1:n_l],Bin)
     if H
-        @variable(model, a[1:p,1:n_b],Float)
-        @variable(model, hat_a[1:p,1:n_b],Float)
+        @variable(model, a[1:p,1:n_b])
+        @variable(model, hat_a[1:p,1:n_b])
         @variable(model, s[1:p,1:n_b],Bin)
     else
         @variable(model, a[1:p,1:n_b],Bin)
@@ -182,7 +185,11 @@ function classification_tree_MIO(D::Int64,N_min::Int64,C::Int64,X::Array{Float64
     
 
     #return(model)
-    return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l))
+    if needZ
+        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l),value.(z))
+    else
+        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l))
+    end
 
 end
 
@@ -213,21 +220,78 @@ function indice_min(liste)
     return(i_min)
 end
 
-function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha::Array{Float64,1}=[0.0])
+function heuristic_OCT_H_aux(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,step::Int64,currentTree::Tree)
+    max=2^D-1
+    this_tree,miss,z=classification_tree_MIO(1,1,X,Y,K,0,null_Tree(),true,0.0,true)
+    currentTree.a[:,step]=this_tree.a[:,1]
+    currentTree.b[step]=this_tree.b[1]
+    if 2*step<max
+        left=Bool[]
+        right=Bool[]
+        for i in 1:length(Y)
+            append!(left,z[i,1])
+            append!(right,z[i,2])
+        end
+        heuristic_OCT_H_aux(D,X[left,:],Y[left],K,2*step,currentTree) 
+        heuristic_OCT_H_aux(D,X[right,:],Y[right],K,2*step+1,currentTree)
+    else
+        currentTree.c[2*step-max]=this_tree.c[1]
+        currentTree.c[2*step-max+1]=this_tree.c[2]
+    end
+
+end
+
+function heuristic_OCT_H(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64)
+    p=length(X[1,:])
+    n_b=2^D-1
+    current_tree=Tree(D,zeros(Float64,p,n_b),zeros(Float64,n_b),zeros(Int64,n_b+1))
+    heuristic_OCT_H_aux(D,X,Y,K,1,current_tree)
+
+    return(current_tree,score(current_tree,X,Y))
+end
+
+function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0])
     warm_start_list=Tree[]
     miss_list=zeros(Int64,0)
     n=length(Y)
     for D in 1:D_max
-        for C in 1:2^D-1
-            if warm_start_list==[]
-                new_tree,missclassification=classification_tree_MIO(D,N_Min,C,X,Y,K)
-            else
-                i=indice_min(miss_list)
-                new_tree,missclassification=classification_tree_MIO(D,N_Min,C,X,Y,K,warm_start_list[i])
+        if H
+            warm_start,miss=heuristic_OCT_H(D,X,Y,K)
+            append!(warm_start_list,[warm_start])
+            append!(miss_list,[miss])
+            println(miss)
+            for alpha in alpha_array
+
+                println("D = ",D,", alpha = ", alpha)
+                if warm_start_list==[]
+                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,null_Tree(),true,alpha)
+                else
+                    i=indice_min(miss_list)
+                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,warm_start_list[i],true,alpha)
+                end
+                println(missclassification)
+
+                append!(warm_start_list,[new_tree])
+                append!(miss_list,[missclassification])
+
             end
-            
-            append!(warm_start_list,[new_tree])
-            append!(miss_list,[missclassification])
+
+        else
+
+            for C in 1:2^D-1
+                println("D = ",D,", C = ", C)
+
+                if warm_start_list==[]
+                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,C)
+                else
+                    i=indice_min(miss_list)
+                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,C,warm_start_list[i])
+                end
+                            
+                append!(warm_start_list,[new_tree])
+                append!(miss_list,[missclassification])
+            end
+
         end
     end
     return(warm_start_list[indice_min(miss_list)])

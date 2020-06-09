@@ -6,9 +6,9 @@ function generate_Tree(D::Int64,p::Int64,K::Int64,H::Bool=false)
     if H
         a=rand(Float64,(p,n_b))
         for t in 1:n_b
-            sum=sum(a[j,t] for j in 1:p)
+            somme=sum(a[j,t] for j in 1:p)
             for j in 1:p
-                a[j,t]=a[j,t]/sum
+                a[j,t]=a[j,t]/somme
             end
         end   
     else

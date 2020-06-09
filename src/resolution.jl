@@ -33,13 +33,17 @@ function find_p(x::Int64)
 end 
 
 
-function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false)
+function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=true)
     n=length(Y)
     p=length(X[1,:])
     Yk=-ones(Int64,n,K)
 
     for i in 1:n
         Yk[i,Y[i]]=1
+    end
+
+    if verbose
+        println("MIO initialisation")
     end
 
     eps=ones(Float64,p)
@@ -78,7 +82,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
     model=Model(CPLEX.Optimizer)
 
     set_silent(model)
-    set_time_limit_sec(model,180)
+    set_time_limit_sec(model,120*D)
 
     n_l=2^D #Leaves number
     n_b=2^D-1 #Branch nodes number
@@ -166,6 +170,10 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
         @objective(model, Min, (1/L_hat)*sum(L[t] for t in 1:n_l))
     end
 
+    if verbose
+        println("Solving ...")
+    end
+
     optimize!(model)
 
     final_c=zeros(Int64,n_l)
@@ -228,12 +236,18 @@ function heuristic_OCT_H_aux(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::I
     if 2*step<max
         left=Bool[]
         right=Bool[]
+        nb_left=0
         for i in 1:length(Y)
+            nb_left=nb_left+z[i,1]
             append!(left,z[i,1])
             append!(right,z[i,2])
         end
-        heuristic_OCT_H_aux(D,X[left,:],Y[left],K,2*step,currentTree) 
-        heuristic_OCT_H_aux(D,X[right,:],Y[right],K,2*step+1,currentTree)
+        if nb_left>0
+            heuristic_OCT_H_aux(D,X[left,:],Y[left],K,2*step,currentTree) 
+        end
+        if nb_left<length(Y)
+            heuristic_OCT_H_aux(D,X[right,:],Y[right],K,2*step+1,currentTree)
+        end
     else
         currentTree.c[2*step-max]=this_tree.c[1]
         currentTree.c[2*step-max+1]=this_tree.c[2]
@@ -259,17 +273,13 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
             warm_start,miss=heuristic_OCT_H(D,X,Y,K)
             append!(warm_start_list,[warm_start])
             append!(miss_list,[miss])
-            println(miss)
             for alpha in alpha_array
-
-                println("D = ",D,", alpha = ", alpha)
                 if warm_start_list==[]
                     new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,null_Tree(),true,alpha)
                 else
                     i=indice_min(miss_list)
                     new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,warm_start_list[i],true,alpha)
                 end
-                println(missclassification)
 
                 append!(warm_start_list,[new_tree])
                 append!(miss_list,[missclassification])
@@ -279,7 +289,6 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
         else
 
             for C in 1:2^D-1
-                println("D = ",D,", C = ", C)
 
                 if warm_start_list==[]
                     new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,C)
@@ -289,7 +298,7 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
                 end
                             
                 append!(warm_start_list,[new_tree])
-                append!(miss_list,[missclassification])
+                append!(miss_list,[round(Int64,missclassification)])
             end
 
         end

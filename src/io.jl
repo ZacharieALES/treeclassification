@@ -3,6 +3,54 @@ include("Tree.jl")
 Read a data file and create an array X containing the features and Y containing the class labels
 """
 
+function zero_one_scaling(X)
+    n=length(X[:,1])
+    p=length(X[1,:])
+    newX=zeros(Float64,n,p)
+    x_min=zeros(Float64,p)
+    x_max=zeros(Float64,p)
+    for i in 1:n
+        for j in 1:p
+            if (i==1 || X[i,j]>x_max[j])
+                x_max[j]=X[i,j]
+            end
+            if (i==1 || X[i,j]<x_min[j])
+                x_min[j]=X[i,j]
+            end
+        end
+    end
+
+    #Scaling the data in [0,1]
+    for j in 1:p
+        m=1/(x_max[j]-x_min[j])
+        p=x_min[j]
+        for i in 1:n
+            newX[i,j]=m*(X[i,j]-p)
+        end
+    end
+    return(newX)
+end
+
+function create_integer_labels(Y::Array{Any,1})
+    n=length(Y[:,1])
+    labels_ref=[]
+    labels=zeros(Int64,n)
+    for i in 1:n
+        k=1
+        k_max=length(labels_ref)+1
+        while k<k_max && labels_ref[k,:]!=Y[i,:]
+            k=k+1
+        end
+        if k==k_max
+            append!(labels_ref,Y[i,:])
+        end
+        labels[i]=k
+    end
+    return(labels,labels_ref)
+end
+
+
+
 function readDataFile(inputFile::String,header::Bool=true,separator::Char=" ")
     dataFile=open(inputFile)
     data=readlines(dataFile)
@@ -27,7 +75,7 @@ function readDataFile(inputFile::String,header::Bool=true,separator::Char=" ")
             if (i==i_min || line[j]>x_max[j])
                 x_max[j]=X[i,j]
             end
-            if (i==i_min || line[j]<x_max[j])
+            if (i==i_min || line[j]<x_min[j])
                 x_min[j]=X[i,j]
             end
         end

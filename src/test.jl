@@ -40,7 +40,7 @@ function compare_OCT_CART(nb_test::Int64,D,n,p,K,Dmax)
     return(oct,cart)
 end
 
-println(compare_OCT_CART(20,3,150,3,4,2))
+#println(compare_OCT_CART(20,3,150,3,4,2))
 
 
 #X,Y=load_data("digits")
@@ -56,4 +56,23 @@ println(compare_OCT_CART(20,3,150,3,4,2))
 #        println(i)
 #    end
 #end
+
+function test()
+    
+
+    s1=0
+    s2=0
+
+    for file in filter(x->occursin(".txt", x), readdir("../res"))
+        include("../res/"*file)
+        s1+=oct
+        s2+=cart 
+    end
+
+    println(s1/60," ",s2/60)
+end
+
+
+
+
 

@@ -163,11 +163,71 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
         n_l_tree=2^D_tree
         for t in 1:n_b_tree
             set_start_value(b[t],warm_start.b[t])
+            if warm_start.b[t]>0
+                set_start_value(d[t],1)
+            else
+                set_start_value(d[t],0)
+            end
             for j in 1:p
                 set_start_value(a[j,t],warm_start.a[j,t])
             end
         end
+        for t in n_b_tree+1:n_b
+            set_start_value(b[t],0)
+            set_start_value(d[t],0)
+            for j in 1:p
+                set_start_value(a[j,t],0)
+            end
+        end
+        
+        step=2^(D-D_tree)
+        pred,leaves=predict(warm_start,X,true)
+
+        real_Nkt=zeros(Int64,K,n_l)
+        real_N=zeros(Int64,n_l)
+
+        for t in 1:n_l
+
+            for i in 1:n
+
+                if leaves[i]==div(t,step)
+                    set_start_value(z[i,t],1)
+                    set_start_value(l[t],1)
+                    real_Nkt[pred[i],t]+=1
+                    real_N[t]+=1
+                else
+                    set_start_value(z[i,t],0)
+                end
+            end
+
+            real_c=0
+            if (t%step)==0 && warm_start.c[div(t,step)]!=0
+                real_c=warm_start.c[div(t,step)]
+                set_start_value(L[t],real_N[t]-real_Nkt[real_c,t])
+            else
+                set_start_value(L[t],0)
+            end
+
+            set_start_value(N[t],real_N[t])
+
+            for k in 1:K
+                if (t%step)==0 && k==real_c
+                    set_start_value(c[k,t],1)
+                else
+                    set_start_value(c[k,t],0)
+                end
+                set_start_value(N_k[k,t],real_Nkt[k,t])
+            end
+
+            
+
+
+        end
+
     end
+
+
+
 
     if H
         @objective(model, Min, (1/L_hat)*sum(L[t] for t in 1:n_l) + alpha*sum(sum(s[j,t] for j in 1:p) for t in 1:n_b))
@@ -297,4 +357,49 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
         end
     end
     return(warm_start_list[indice_min(miss_list)])
+end
+
+
+function solveDataSet(datadir::String,prop::Int64,Dmax,K,H=false,alpha_array=[0.0])
+    resFolder="../res"
+
+    cart=0
+    oct=0
+
+    for file in filter(x->occursin(".txt", x), readdir(datadir))  
+        
+        println("-- Resolution of ", file)
+
+        include(datadir*"/"*file)
+
+        n=length(Y)
+
+        train,test=generate_sample(n,prop)
+
+        tree=OCT(Dmax,round(Int64,2*n/100),X[train,:],Y[train],K,H,alpha_array)
+
+        writer=open(resFolder*"/"*file,"w")
+
+        score_oct=score(predict(tree,X[test,:]),Y[test])
+        print(writer,"oct=")
+        println(writer,score_oct)
+
+        CART_tree=DecisionTreeClassifier(max_depth=Dmax)
+        fit!(CART_tree,X[train,:],Y[train])
+
+        score_cart=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
+        print(writer,"cart=")
+        println(writer,score_cart)
+
+        if score_oct>score_cart
+            oct+=1
+        elseif score_cart>score_oct
+            cart+=1
+        end
+
+        close(writer)
+
+    end
+
+    return(oct,cart)
 end

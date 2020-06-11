@@ -30,11 +30,12 @@ function null_Tree()
     return(this)
 end
 
-function predict(T::Tree,X::Array{Float64,2})
+function predict(T::Tree,X::Array{Float64,2},need_leaf::Bool=false)
     n=length(X[:,1])
     p=length(X[1,:])
     max=2^T.D-1
     Y=zeros(Int64,n)
+    leaves=zeros(Int64,n)
     for i in 1:n
         node=1
         while node<=max
@@ -45,8 +46,13 @@ function predict(T::Tree,X::Array{Float64,2})
             end
         end
         Y[i]=T.c[node-max]
+        leaves[i]=node-max
     end
-    return(Y)
+    if need_leaf
+        return(Y,leaves)
+    else
+        return(Y)
+    end
 end
 
 function score(Y1::Array{Int64,1},Y2::Array{Int64,1})

@@ -57,9 +57,9 @@ function generate_sample(n::Int64,prop::Int64)
     return(train,test)
 end
 
-function generate_data_set(D::Int64,p::Int64,K::Int64,n::Int64,nb_instance::Int64,H::Bool=false)
+function generate_data_set(datadir::String,D::Int64,p::Int64,K::Int64,n::Int64,nb_instance::Int64,H::Bool=false)
     for i in 1:nb_instance
-        filename="../data/instance_"*string(i)*"_D"*string(D)*"_p"*string(p)*"_K"*string(K)*"_n"*string(n)
+        filename=datadir*"/instance_"*string(i)*"_D"*string(D)*"_p"*string(p)*"_K"*string(K)*"_n"*string(n)*".txt"
         writer=open(filename,"w")
         T=generate_Tree(D,p,K,H)
         X=generate_X(n,p)

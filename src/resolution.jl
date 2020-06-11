@@ -3,6 +3,8 @@ include("generation.jl")
 using CPLEX
 using JuMP
 
+using DecisionTree
+
 function find_Al_Ar_aux(x::Int64,Al::Array{Int64,1},Ar::Array{Int64,1})
     if x==1
         return(Al,Ar)
@@ -33,7 +35,7 @@ function find_p(x::Int64)
 end 
 
 
-function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=true)
+function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=false)
     n=length(Y)
     p=length(X[1,:])
     Yk=-ones(Int64,n,K)
@@ -81,7 +83,11 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
 
     model=Model(CPLEX.Optimizer)
 
-    set_silent(model)
+    if !verbose
+        set_silent(model)
+    end
+
+    
     set_time_limit_sec(model,120*D)
 
     n_l=2^D #Leaves number
@@ -201,19 +207,6 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
 
 end
 
-function score(T::Tree,X::Array{Float64,2},Y::Array{Int64,1})
-    s=0
-    D=T.D
-    n=length(Y)
-    p=length(X[1,:])
-    max=2^D
-    for i in 1:n
-        if predict_class(T,X[i,:])!=Y[i]
-            s+=1
-        end
-    end
-    return(s)
-end
 
 
 function indice_min(liste)
@@ -261,7 +254,7 @@ function heuristic_OCT_H(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64
     current_tree=Tree(D,zeros(Float64,p,n_b),zeros(Float64,n_b),zeros(Int64,n_b+1))
     heuristic_OCT_H_aux(D,X,Y,K,1,current_tree)
 
-    return(current_tree,score(current_tree,X,Y))
+    return(current_tree,score(predict(current_tree,X),Y))
 end
 
 function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0])

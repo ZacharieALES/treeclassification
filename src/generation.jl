@@ -29,27 +29,9 @@ function generate_X(n::Int64,p::Int64)
     return(X)
 end
 
-function predict_class(T::Tree,x::Array{Float64,1})
-    p=length(x)
-    max=2^T.D-1
-    node=1
-    while node<=max
-        if sum(T.a[j,node]*x[j] for j in 1:p)<T.b[node]
-            node=2*node
-        else
-            node=2*node+1
-        end
-    end
-    return(T.c[node-max])
-end
 
 function generate_Y(T::Tree,X::Array{Float64,2})
-    n=length(X[:,1])
-    Y=zeros(Int64,n)
-    for i in 1:n
-        Y[i]=predict_class(T,X[i,:])
-    end
-    return(Y)
+    return(predict(T,X))
 end
 
 function generate_X_Y(D::Int64,p::Int64,K::Int64,n::Int64,H::Bool=false)
@@ -58,4 +40,39 @@ function generate_X_Y(D::Int64,p::Int64,K::Int64,n::Int64,H::Bool=false)
     Y=generate_Y(T,X)
 
     return(X,Y)
+end
+
+function generate_sample(n::Int64,prop::Int64)
+    nb=0
+    train=ones(Bool,n)
+    test=zeros(Bool,n)
+    while nb<round(prop/100*n)
+        i=rand(1:n)
+        if train[i]
+            train[i]=false
+            test[i]=true
+            nb=nb+1
+        end
+    end
+    return(train,test)
+end
+
+function generate_data_set(D::Int64,p::Int64,K::Int64,n::Int64,nb_instance::Int64,H::Bool=false)
+    for i in 1:nb_instance
+        filename="../data/instance_"*string(i)*"_D"*string(D)*"_p"*string(p)*"_K"*string(K)*"_n"*string(n)
+        writer=open(filename,"w")
+        T=generate_Tree(D,p,K,H)
+        X=generate_X(n,p)
+        Y=generate_Y(T,X)
+
+        print(writer,"T=")
+        println(writer,T)
+
+        print(writer,"X=")
+        println(writer,X)
+
+        print(writer,"Y=")
+        println(writer,Y)
+        close(writer)
+    end
 end

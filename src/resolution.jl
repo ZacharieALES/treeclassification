@@ -1,7 +1,9 @@
 include("generation.jl")
+include("Result.jl")
 
 using CPLEX
 using JuMP
+
 
 using DecisionTree
 
@@ -61,6 +63,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
     end
 
 
+
     eps_min=1
     for j in 1:p
         if eps[j]<eps_min
@@ -88,7 +91,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
     end
 
     
-    set_time_limit_sec(model,120*D)
+    set_time_limit_sec(model,60*D)
 
     n_l=2^D #Leaves number
     n_b=2^D-1 #Branch nodes number
@@ -151,7 +154,8 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
             @constraint(model, [i in 1:n,m in Al], sum(a[j,m]*X[i,j] for j in 1:p) +mu <= b[m]+(2+mu)*(1-z[i,t]))
         else
             @constraint(model,[i in 1:n,m in Ar], sum(a[j,m]*X[i,j] for j in 1:p) >= b[m]-(1-z[i,t]))
-            @constraint(model,[i in 1:n,m in Al], sum(a[j,m]*(X[i,j]) for j in 1:p) + eps_min <= b[m]+(1+eps_min)*(1-z[i,t]))
+            @constraint(model,[i in 1:n,m in Al], sum(a[j,m]*(X[i,j]+eps[j]/2) for j in 1:p)<= b[m]+(1+eps_min)*(1-z[i,t]))
+            @constraint(model, [i in 1:n, m in Al], z[i,t]<=d[m])
         end
     end
 
@@ -360,46 +364,79 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
 end
 
 
-function solveDataSet(datadir::String,prop::Int64,Dmax,K,H=false,alpha_array=[0.0])
+function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0])
     resFolder="../res"
+    dataFolder="../data"
 
     cart=0
     oct=0
 
-    for file in filter(x->occursin(".txt", x), readdir(datadir))  
+    for file in filter(x->occursin(".txt", x), readdir(dataFolder*"/"*datadir))  
         
         println("-- Resolution of ", file)
 
-        include(datadir*"/"*file)
+        include(dataFolder*"/"*datadir*"/"*file)
 
         n=length(Y)
 
         train,test=generate_sample(n,prop)
 
-        tree=OCT(Dmax,round(Int64,2*n/100),X[train,:],Y[train],K,H,alpha_array)
+        OCT_time=time()
 
-        writer=open(resFolder*"/"*file,"w")
+        tree=OCT(Dmax,1,X[train,:],Y[train],K,H,alpha_array)
 
-        score_oct=score(predict(tree,X[test,:]),Y[test])
-        print(writer,"oct=")
-        println(writer,score_oct)
-
-        CART_tree=DecisionTreeClassifier(max_depth=Dmax)
+        OCT_time=time()-OCT_time
+        OCT_train=score(predict(tree,X[train,:]),Y[train])
+        OCT_test=score(predict(tree,X[test,:]),Y[test])
+        
+        CART_time=time()
+    
+        CART_tree=DecisionTreeClassifier()
         fit!(CART_tree,X[train,:],Y[train])
 
-        score_cart=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
-        print(writer,"cart=")
-        println(writer,score_cart)
+        CART_size=DecisionTree.depth(CART_tree)
 
-        if score_oct>score_cart
-            oct+=1
-        elseif score_cart>score_oct
-            cart+=1
+        CART_time=time()-CART_time
+        CART_train=score(DecisionTree.predict(CART_tree,X[train,:]),Y[train])
+        CART_test=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
+
+        limited_time=time()
+        
+        limited_tree=DecisionTreeClassifier(max_depth=Dmax)
+        fit!(limited_tree,X[train,:],Y[train])
+
+        limited_time=time()-limited_time
+
+        limited_train=score(DecisionTree.predict(limited_tree,X[train,:]),Y[train])
+        limited_test=score(DecisionTree.predict(limited_tree,X[test,:]),Y[test])
+
+        factor=(100-prop)/100
+
+        res=Result(Dmax,OCT_time,OCT_train*100/(n*factor),OCT_test*100/(n*(1-factor)),CART_size,CART_time,CART_train*100/(n*factor),CART_test*100/(n*(1-factor)),limited_time,limited_train*100/(n*factor),limited_test*100/(n*(1-factor)))
+
+
+        if !isdir(resFolder*"/"*datadir)
+            mkdir(resFolder*"/"*datadir)
         end
+
+        writer=open(resFolder*"/"*datadir*"/"*file,"w")
+        
+        println(writer,res)
+
+        
 
         close(writer)
 
     end
 
-    return(oct,cart)
+end
+
+function solveAll()
+    for dir in readdir("../data")
+        if isdir("../data/"*dir)
+            println("Currently in folder : ", dir)
+            solveDataSet(dir,25,2)
+            synthetic_res("../res/"*dir)
+        end
+    end
 end

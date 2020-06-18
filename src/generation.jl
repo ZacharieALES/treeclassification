@@ -73,6 +73,9 @@ function generate_data_set(datadir::String,D::Int64,p::Int64,K::Int64,n::Int64,n
 
         print(writer,"Y=")
         println(writer,Y)
+
+        print(writer,"K=")
+        println(writer,K)
         close(writer)
     end
 end

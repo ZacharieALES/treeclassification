@@ -21,14 +21,19 @@ function zero_one_scaling(X)
     end
 
     #Scaling the data in [0,1]
+    indi=zeros(Bool,p)
     for j in 1:p
-        m=1/(x_max[j]-x_min[j])
-        p=x_min[j]
-        for i in 1:n
-            newX[i,j]=m*(X[i,j]-p)
+        if (x_max[j]-x_min[j])!=0
+            m=1/(x_max[j]-x_min[j])
+            p=x_min[j]
+            for i in 1:n
+                newX[i,j]=m*(X[i,j]-p)
+            end
+            indi[j]=true
         end
     end
-    return(newX)
+    
+    return(newX[:,indi])
 end
 
 function create_integer_labels(Y::Array{Any,1})
@@ -51,45 +56,44 @@ end
 
 
 
-function readDataFile(inputFile::String,header::Bool=true,separator::Char=" ")
+function readDataFile(inputFile::String,start::Int64,column::Array{Bool,1},labels::Int64=-1,separator::Char=' ')
     dataFile=open(inputFile)
     data=readlines(dataFile)
     close(dataFile)
 
-    i_min=1
-    if header
-        i_min=2
-    end
+    i_min=start
 
     n=length(data)+1-i_min
-    p=length(split(data[i_min],separator))-1
-    X=zeros(Float64,n,p)
-    x_min=zeros(Float64,p)
-    x_max=zeros(Float64,p)
-    Y=zeros(Int64,n)
+    p=sum(column[i] for i in 1:length(column))
+    X=Array{Any,2}(nothing,n,p)
+    x_min=Array{Any,1}(nothing,p)
+    x_max=Array{Any,1}(nothing,p)
+    Y=Array{Any,1}(nothing,n)
+
+    if labels==-1
+        labels=p+1
+    end
 
     for i in 1:n
-        line=split(data[i+i_min-1],separator)
-        for j in 1:p
-            X[i,j]=parse(Float64,line[j])
-            if (i==i_min || line[j]>x_max[j])
-                x_max[j]=X[i,j]
+        line=split(data[i+i_min-1],separator,keepempty=false)
+        j=1
+        real_j=1
+        while j<=p
+            if column[real_j]
+                X[i,j]=parse(Float64,line[real_j])
+                if (i==i_min || X[i,j]>x_max[j])
+                    x_max[j]=X[i,j]
+                end
+                if (i==i_min || X[i,j]<x_min[j])
+                    x_min[j]=X[i,j]
+                end
+                j+=1
             end
-            if (i==i_min || line[j]<x_min[j])
-                x_min[j]=X[i,j]
-            end
+            real_j+=1
         end
-        Y[i]=parse(Int64,line[p+1])
+        Y[i]=line[labels]
     end
 
-    #Scaling the data in [0,1]
-    for j in 1:p
-        m=1/(x_max[j]-x_min[j])
-        p=x_min[j]
-        for i in 1:n
-            X[i,j]=m*(X[i,j]-p)
-        end
-    end
 
 
     return(X,Y)

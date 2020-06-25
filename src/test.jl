@@ -2,118 +2,123 @@ include("resolution.jl")
 
 using Random
 
-function test_missclassification(X,Y,K::Int64,Dmax::Int64,need_scale::Bool=true,need_integer_labels::Bool=true,prop::Int64=25,H::Bool=false,alpha_array::Array{Float64,1}=[0.0])
-    if need_scale
-        X=zero_one_scaling(X)
-    end
-    if need_integer_labels
-        Y,ref=create_integer_labels(Y)
-    end
+function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0],time_limit::Int64=-1)
+    resFolder="../res"
+    dataFolder="../data"
 
-    n=length(Y)
-
-    train,test=generate_sample(n,prop)
-
-    tree=OCT(Dmax,round(Int64,2*n/100),X[train,:],Y[train],K,H,alpha_array)
-
-    CART_tree=DecisionTreeClassifier(max_depth=Dmax)
-    fit!(CART_tree,X[train,:],Y[train])
-        
-
-    return(score(predict(tree,X[test,:]),Y[test]),score(DecisionTree.predict(CART_tree,X[test,:]),Y[test]))
-end
-
-
-function compare_OCT_CART(nb_test::Int64,D,n,p,K,Dmax)
     cart=0
     oct=0
 
-    for i in 1:nb_test
-        X,Y=generate_X_Y(D,p,K,n)
-        infos=test_missclassification(X,Y,K,Dmax,false,false)
-        println("OCT : ",infos[1]," CART : ",infos[2])
-        if infos[1]<infos[2]
-            oct=oct+1
-        elseif infos[2]<infos[1]
-            cart=cart+1
-        end
-    end
-    return(oct,cart)
-end
+    for file in filter(x->occursin(".txt", x), readdir(dataFolder*"/"*datadir))  
+        
+        println("-- Resolution of ", file)
 
-#println(compare_OCT_CART(20,3,150,3,4,2))
+        include(dataFolder*"/"*datadir*"/"*file)
 
+        n=length(Y)
 
-#X,Y=load_data("digits")
+        train,test=generate_sample(n,prop)
 
-#X=zero_one_scaling(X)
-#Y,ref=create_integer_labels(Y)
+        OCT_time=time()
 
-#println(test_missclassification(X,Y,10,2,false,false))
+        tree,gap=OCT(Dmax,1,X[train,:],Y[train],K,H,alpha_array,false,time_limit)
 
-#n=length(Y)
-#for i in 1:n
-#    if predict_class(tree,X[i,:])!=Y[i]
-#        println(i)
-#    end
-#end
-
-
-
-
-
-function save_digits()
-    X,Y=load_data("digits")
-    X=zero_one_scaling(X)
-    p=length(X[1,:])
-    indi=ones(Bool,p)
-    for j in 1:p
-        if isnan(X[1,j])
-            indi[j]=false
-        end
-    end
-    println(indi)
-    save_X_Y("../data/real_world/digits.txt",X[:,indi],Y)
-end
-
-
-function test_miss()
+        OCT_time=time()-OCT_time
+        OCT_train=score(predict(tree,X[train,:]),Y[train])
+        OCT_test=score(predict(tree,X[test,:]),Y[test])
+        
+        CART_time=time()
     
-    k=129
-    Random.seed!(k)
-    include("../data/n100_p3_K4/instance_8_D3_p3_K4_n100.txt")
-    CART=DecisionTreeClassifier(max_depth=2)
-    n=length(Y)
-    train,test=generate_sample(n,25)
-    fit!(CART,X[train,:],Y[train])
+        CART_tree=DecisionTreeClassifier()
+        fit!(CART_tree,X[train,:],Y[train])
 
-    score_CART=score(DecisionTree.predict(CART,X[train,:]),Y[train])
+        CART_size=DecisionTree.depth(CART_tree)
 
-    OCT_tree,miss_OCT,z=classification_tree_MIO(2,1,X[train,:],Y[train],4,5,null_Tree(),false,0.0,true)
+        CART_time=time()-CART_time
+        CART_train=score(DecisionTree.predict(CART_tree,X[train,:]),Y[train])
+        CART_test=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
 
-    println("Arbre")
-    println(OCT_tree)
+        limited_time=time()
+        
+        limited_tree=DecisionTreeClassifier(max_depth=Dmax)
+        fit!(limited_tree,X[train,:],Y[train])
 
-    partX=X[train,:]
-    partY=Y[train]
-    partn=length(partY)
+        limited_time=time()-limited_time
 
-    newY=predict(OCT_tree,X[train,:])
+        limited_train=score(DecisionTree.predict(limited_tree,X[train,:]),Y[train])
+        limited_test=score(DecisionTree.predict(limited_tree,X[test,:]),Y[test])
 
-    for i in 1:partn
-        if newY[i]!=partY[i]
-            println("Predicted : ",newY[i])
-            println("Real : ",partY[i])
-            println(partX[i,:])
+        factor=(100-prop)/100
+
+        res=Result(Dmax,OCT_time,OCT_train*100/(n*factor),OCT_test*100/(n*(1-factor)),CART_size,CART_time,CART_train*100/(n*factor),CART_test*100/(n*(1-factor)),limited_time,limited_train*100/(n*factor),limited_test*100/(n*(1-factor)))
+
+
+        if !isdir(resFolder*"/"*datadir)
+            mkdir(resFolder*"/"*datadir)
         end
+
+        writer=open(resFolder*"/"*datadir*"/"*file,"w")
+        
+        println(writer,res)
+
+        if gap!=0
+            println(writer,"# Gap = ",gap)
+        end
+
+        close(writer)
+
     end
 
-    println(sum(newY[i]!=partY[i] for i in 1:partn))
-
-    score_OCT=score(predict(OCT_tree,X[train,:]),Y[train])
-
-    println(miss_OCT," : ",score_OCT)
-    
 end
 
-println(test_miss())
+function solveAll(D::Int64=2,time_limit::Int64=-1,H::Bool=false)
+    for dir in readdir("../data")
+        if isdir("../data/"*dir)
+            println("Currently in folder : ", dir)
+            solveDataSet(dir,25,D,H,[0.0],time_limit)
+            synthetic_res("../res/"*dir)
+        end
+    end
+end
+
+function test_forest()
+
+    datadir="../data/real_world"
+    prop=25
+    Dmax=3
+    Nmin=1
+    time_limit=200
+    nb_tree=3
+    percentage=40
+
+    for file in filter(x->occursin(".txt", x), readdir(datadir))
+        println("-- Resolution of ", file)
+
+        include(datadir*"/"*file)
+
+        n=length(Y)
+
+        train,test=generate_sample(n,prop)
+
+
+        OCT_time=time()
+
+        tree=OCT(Dmax,Nmin,X[train,:],Y[train],K,false,[0.0],false,time_limit)
+
+        OCT_time=time()-OCT_time
+        OCT_train=score(predict(tree,X[train,:]),Y[train])
+        OCT_test=score(predict(tree,X[test,:]),Y[test])
+
+        println("## OCT ## Time : ",OCT_time,", erreur train/test : ",OCT_train,"/",OCT_test)
+
+        forest_time=time()
+
+        forest=OCT_forest(Dmax,Nmin,X[train,:],Y[train],K,false,[0.0],nb_tree,percentage,time_limit)
+        
+        forest_time=time()-forest_time
+        forest_train=score(predict_forest(forest,X[train,:],K),Y[train])
+        forest_test=score(predict_forest(forest,X[test,:],K),Y[test])
+
+        println("## Forest ## Time : ",forest_time,", erreur train/test : ",forest_train,"/",forest_test)
+    end  
+end

@@ -30,6 +30,20 @@ function null_Tree()
     return(this)
 end
 
+function predict_one(T::Tree,x::Array{Float64,1})
+    p=length(x)
+    max=2^T.D-1
+    node=1
+    while node<=max
+        if sum(T.a[j,node]*x[j] for j in 1:p)<T.b[node]
+            node=2*node
+        else
+            node=2*node+1
+        end
+    end
+    return(T.c[node-max])
+end
+
 function predict(T::Tree,X::Array{Float64,2},need_leaf::Bool=false)
     n=length(X[:,1])
     p=length(X[1,:])

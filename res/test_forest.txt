@@ -1,0 +1,27 @@
+-- Resolution of columns2.txt
+## OCT ## Time : 200.4107789993286, erreur train/test : 36/19
+## Forest ## Time : 200.12692499160767, erreur train/test : 27/11
+-- Resolution of columns3.txt
+## OCT ## Time : 200.15522694587708, erreur train/test : 36/13
+## Forest ## Time : 201.33311486244202, erreur train/test : 37/11
+-- Resolution of ecoli.txt
+## OCT ## Time : 200.47625517845154, erreur train/test : 55/21
+## Forest ## Time : 200.79837489128113, erreur train/test : 45/18
+-- Resolution of iris.txt
+## OCT ## Time : 83.20859098434448, erreur train/test : 0/3
+## Forest ## Time : 51.093791007995605, erreur train/test : 4/5
+
+
+
+-- Resolution of columns2.txt
+## OCT ## Time : 600.953458070755, erreur train/test : 31/13
+## Forest ## Time : 601.0844340324402, erreur train/test : 29/16
+-- Resolution of columns3.txt
+## OCT ## Time : 600.89701795578, erreur train/test : 28/19
+## Forest ## Time : 601.2163770198822, erreur train/test : 32/14
+-- Resolution of ecoli.txt
+## OCT ## Time : 600.2920830249786, erreur train/test : 30/19
+## Forest ## Time : 600.8444769382477, erreur train/test : 37/16
+-- Resolution of iris.txt
+## OCT ## Time : 500.33395504951477, erreur train/test : 0/4
+## Forest ## Time : 36.03135395050049, erreur train/test : 2/3

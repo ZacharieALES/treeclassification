@@ -37,7 +37,7 @@ function find_p(x::Int64)
 end 
 
 
-function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=false)
+function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=false,time_limit::Int64=-1)
     n=length(Y)
     p=length(X[1,:])
     Yk=-ones(Int64,n,K)
@@ -90,8 +90,9 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
         set_silent(model)
     end
 
-    
-    set_time_limit_sec(model,60*D)
+    if time_limit!=-1
+        set_time_limit_sec(model,time_limit)
+    end
 
     n_l=2^D #Leaves number
     n_b=2^D-1 #Branch nodes number
@@ -246,6 +247,12 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
 
     optimize!(model)
 
+    gap=0
+
+    if termination_status(model) != MOI.OPTIMAL
+        gap=abs(JuMP.objective_bound(model) - JuMP.objective_value(model)) / JuMP.objective_value(model)
+    end
+
     final_c=zeros(Int64,n_l)
     n_l=2^D
     for t in 1:n_l
@@ -264,9 +271,9 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
 
     #return(model)
     if needZ
-        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l),value.(z))
+        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l),gap,value.(z))
     else
-        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l))
+        return(Tree(D,value.(a),value.(b),final_c),sum(value(L[t]) for t in 1:n_l),gap)
     end
 
 end
@@ -287,7 +294,7 @@ end
 
 function heuristic_OCT_H_aux(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,step::Int64,currentTree::Tree)
     max=2^D-1
-    this_tree,miss,z=classification_tree_MIO(1,1,X,Y,K,0,null_Tree(),true,0.0,true)
+    this_tree,miss,gap,z=classification_tree_MIO(1,1,X,Y,K,0,null_Tree(),true,0.0,true)
     currentTree.a[:,step]=this_tree.a[:,1]
     currentTree.b[step]=this_tree.b[1]
     if 2*step<max
@@ -321,9 +328,24 @@ function heuristic_OCT_H(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64
     return(current_tree,score(predict(current_tree,X),Y))
 end
 
-function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0])
+function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0],need_gap::Bool=true,time_limit::Int64=-1)
+    
+    start=time()
+
+    frac_time=0
+
+    reason=4
+    double_reason=reason*2
+
+    if H
+        frac_time=length(alpha_array)*reason*(reason^D_max-1)/(reason-1)
+    else
+        frac_time=double_reason*(double_reason^D_max-1)/(double_reason-1)-reason*(reason^D_max-1)/(reason-1)
+    end
+    
     warm_start_list=Tree[]
     miss_list=zeros(Int64,0)
+    gaps=zeros(Float64,0)
     n=length(Y)
     for D in 1:D_max
         if H
@@ -331,15 +353,26 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
             append!(warm_start_list,[warm_start])
             append!(miss_list,[miss])
             for alpha in alpha_array
+
+                if time_limit==-1
+                    allowed_time=-1
+                else
+                    remaining_time=time_limit-(time()-start)
+                    allowed_time=ceil(Int64,remaining_time*reason^D/frac_time)
+                end
+
                 if warm_start_list==[]
-                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,null_Tree(),true,alpha)
+                    new_tree,missclassification,gap=classification_tree_MIO(D,N_Min,X,Y,K,0,null_Tree(),true,alpha,false,false,allowed_time)
                 else
                     i=indice_min(miss_list)
-                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,0,warm_start_list[i],true,alpha)
+                    new_tree,missclassification,gap=classification_tree_MIO(D,N_Min,X,Y,K,0,warm_start_list[i],true,alpha,false,false,allowed_time)
                 end
 
                 append!(warm_start_list,[new_tree])
                 append!(miss_list,[missclassification])
+                append!(gaps,[gap])
+
+                frac_time-=reason^D
 
             end
 
@@ -347,96 +380,102 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
 
             for C in 1:2^D-1
 
+                if time_limit==-1
+                    allowed_time=-1
+                else
+                    remaining_time=time_limit-(time()-start)
+                    allowed_time=ceil(Int64,remaining_time*reason^D/frac_time)
+                end
+
+
                 if warm_start_list==[]
-                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,C)
+                    new_tree,missclassification,gap=classification_tree_MIO(D,N_Min,X,Y,K,C,null_Tree(),false,0.0,false,false,allowed_time)
                 else
                     i=indice_min(miss_list)
-                    new_tree,missclassification=classification_tree_MIO(D,N_Min,X,Y,K,C,warm_start_list[i])
+                    new_tree,missclassification,gap=classification_tree_MIO(D,N_Min,X,Y,K,C,warm_start_list[i],false,0.0,false,false,allowed_time)
                 end
-                            
+                
                 append!(warm_start_list,[new_tree])
                 append!(miss_list,[round(Int64,missclassification)])
+                append!(gaps,[gap])
+
+                frac_time-=reason^D
             end
 
         end
     end
-    return(warm_start_list[indice_min(miss_list)])
+    best_i=indice_min(miss_list)
+
+    if need_gap
+        return(warm_start_list[best_i],gaps[best_i])
+    else
+        return(warm_start_list[best_i])
+    end
 end
 
 
-function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0])
-    resFolder="../res"
-    dataFolder="../data"
 
-    cart=0
-    oct=0
 
-    for file in filter(x->occursin(".txt", x), readdir(dataFolder*"/"*datadir))  
-        
-        println("-- Resolution of ", file)
+function OCT_forest(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array=[0.0],nb_tree::Int64=1,percentage_for_one::Int64=-1,time_limit::Int64=-1)
+    n=length(X[:,1])
+    p=length(X[1,:])
+    n_one_tree=0
 
-        include(dataFolder*"/"*datadir*"/"*file)
+    start=time()
 
-        n=length(Y)
+    if percentage_for_one==-1
+        n_one_tree=div(n,nb_tree)
+    else
+        n_one_tree=floor(Int64,n*percentage_for_one/100)
+    end
 
-        train,test=generate_sample(n,prop)
+    sets=create_sets(n,nb_tree,n_one_tree)
 
-        OCT_time=time()
+    trees=Tree[]
 
-        tree=OCT(Dmax,1,X[train,:],Y[train],K,H,alpha_array)
+    for i in 1:nb_tree
+        if time_limit==-1
+            allowed_time=-1
+        else
+            remaining_time=time_limit-(time()-start)
+            allowed_time=ceil(Int64,remaining_time/(nb_tree-i+1))
+        end
 
-        OCT_time=time()-OCT_time
-        OCT_train=score(predict(tree,X[train,:]),Y[train])
-        OCT_test=score(predict(tree,X[test,:]),Y[test])
-        
-        CART_time=time()
+        new_tree=OCT(D_max,N_Min,X[sets[i,:],:],Y[sets[i,:]],K,H,alpha_array,false,allowed_time)
+        append!(trees,[new_tree])
+
+    end
+
+    return(trees)
+end
+
+
+function predict_forest(forest::Array{Tree,1},X::Array{Float64,2},K::Int64)
+    n=length(X[:,1])
+    Y=zeros(Int64,n)
+
+    nb_tree=length(forest)
     
-        CART_tree=DecisionTreeClassifier()
-        fit!(CART_tree,X[train,:],Y[train])
-
-        CART_size=DecisionTree.depth(CART_tree)
-
-        CART_time=time()-CART_time
-        CART_train=score(DecisionTree.predict(CART_tree,X[train,:]),Y[train])
-        CART_test=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
-
-        limited_time=time()
-        
-        limited_tree=DecisionTreeClassifier(max_depth=Dmax)
-        fit!(limited_tree,X[train,:],Y[train])
-
-        limited_time=time()-limited_time
-
-        limited_train=score(DecisionTree.predict(limited_tree,X[train,:]),Y[train])
-        limited_test=score(DecisionTree.predict(limited_tree,X[test,:]),Y[test])
-
-        factor=(100-prop)/100
-
-        res=Result(Dmax,OCT_time,OCT_train*100/(n*factor),OCT_test*100/(n*(1-factor)),CART_size,CART_time,CART_train*100/(n*factor),CART_test*100/(n*(1-factor)),limited_time,limited_train*100/(n*factor),limited_test*100/(n*(1-factor)))
-
-
-        if !isdir(resFolder*"/"*datadir)
-            mkdir(resFolder*"/"*datadir)
+    
+    for i in 1:n
+        count=zeros(Int64,K)
+        for j in 1:nb_tree
+            indi=predict_one(forest[j],X[i,:])
+            if indi>0
+                count[indi]+=1
+            end
         end
 
-        writer=open(resFolder*"/"*datadir*"/"*file,"w")
-        
-        println(writer,res)
-
-        
-
-        close(writer)
-
-    end
-
-end
-
-function solveAll()
-    for dir in readdir("../data")
-        if isdir("../data/"*dir)
-            println("Currently in folder : ", dir)
-            solveDataSet(dir,25,2)
-            synthetic_res("../res/"*dir)
+        max=count[1]
+        j_max=1
+        for j in 2:K
+            if max<count[j]
+                max=count[j]
+                j_max=j
+            end
         end
+
+        Y[i]=j_max
     end
+    return(Y)
 end

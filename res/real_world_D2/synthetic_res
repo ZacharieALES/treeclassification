@@ -1,0 +1,15 @@
+#################################################
+# Résultats synthétiques pour ce jeu de données #
+#################################################
+Temps moyen mis par OCT : 183.16660571098328
+Pourcentage d'erreur de classification moyen (train) : 11.947900665642601%
+Pourcentage d'erreur de classification moyen (test) : 21.468894009216587%
+
+Taille moyenne de CART : 8.25
+Temps moyen mis par CART : 0.0005869865417480469
+Pourcentage d'erreur de classification moyen (train) : 0.0%
+Pourcentage d'erreur de classification moyen (test) : 19.930875576036865%
+
+Temps moyen mis par CART limité : 0.0002611875534057617
+Pourcentage d'erreur de classification moyen (train) : 14.048515104966716%
+Pourcentage d'erreur de classification moyen (test) : 22.36175115207373%

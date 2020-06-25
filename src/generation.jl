@@ -79,3 +79,28 @@ function generate_data_set(datadir::String,D::Int64,p::Int64,K::Int64,n::Int64,n
         close(writer)
     end
 end
+
+function create_sets(n::Int64,nb_set::Int64,n_by_set::Int64)
+    sets=zeros(Bool,nb_set,n)
+    count=zeros(Int64,nb_set)
+    i=1
+    while i<n
+        indi=rand(1:nb_set)
+        if count[indi]<n_by_set
+            sets[indi,i]=true
+            count[indi]+=1
+            i+=1
+        end
+    end
+
+    for i in 1:nb_set
+        while count[i]<n_by_set
+            indi=rand(1:n)
+            if !sets[i,indi]
+                sets[i,indi]=true
+                count[i]+=1
+            end
+        end
+    end
+    return(sets)
+end

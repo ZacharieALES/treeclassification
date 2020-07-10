@@ -1,0 +1,12 @@
+-- Resolution of columns2.txt
+## OCT ## Time : 201.0895369052887, erreur train/test : 31/16
+## ACP ## Time : 1.5936232148238392e9, erreur train/test : 72/28
+-- Resolution of columns3.txt
+## OCT ## Time : 200.56230902671814, erreur train/test : 37/15
+## ACP ## Time : 1.593623616232579e9, erreur train/test : 191/59
+-- Resolution of ecoli.txt
+## OCT ## Time : 200.4181900024414, erreur train/test : 65/16
+## ACP ## Time : 1.593624017281023e9, erreur train/test : 191/61
+-- Resolution of iris.txt
+## OCT ## Time : 200.59865403175354, erreur train/test : 1/1
+## ACP ## Time : 1.593624418651406e9, erreur train/test : 76/24

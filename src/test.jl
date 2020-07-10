@@ -1,5 +1,6 @@
 include("resolution.jl")
 
+using MultivariateStats
 using Random
 
 function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0],time_limit::Int64=-1)
@@ -121,4 +122,94 @@ function test_forest()
 
         println("## Forest ## Time : ",forest_time,", erreur train/test : ",forest_train,"/",forest_test)
     end  
+end
+
+function test_ACP()
+
+    datadir="../data/real_world"
+    prop=25
+    Dmax=3
+    Nmin=1
+    time_limit=200
+
+
+    for file in filter(x->occursin(".txt", x), readdir(datadir))
+        println("-- Resolution of ", file)
+
+        include(datadir*"/"*file)
+
+        tX=transpose(X)
+        M=fit(PCA, tX, maxoutdim=2)
+
+        newX1=transpose(transform(M,tX))
+
+        newX1=zero_one_scaling(newX1)
+
+        M=fit(PCA, tX, maxoutdim=4)
+
+        newX2=transpose(transform(M,tX))
+
+        newX2=zero_one_scaling(newX2)
+
+        n=length(Y)
+
+        train,test=generate_sample(n,prop)
+
+        OCT_time=time()
+
+        tree=OCT(Dmax,Nmin,X[train,:],Y[train],K,false,[0.0],false,time_limit)
+
+        OCT_time=time()-OCT_time
+        OCT_train=score(predict(tree,X[train,:]),Y[train])
+        OCT_test=score(predict(tree,X[test,:]),Y[test])
+
+        println("## OCT ## Time : ",OCT_time,", erreur train/test : ",OCT_train,"/",OCT_test)
+
+        acp_time=time()
+
+        acp=OCT(Dmax,Nmin,newX1[train,:],Y[train],K,false,[0.0],false,time_limit)
+
+        acp_time=time()-acp_time
+        acp_train=score(predict(tree,newX1[train,:]),Y[train])
+        acp_test=score(predict(tree,newX1[test,:]),Y[test])
+
+
+
+        println("## ACP 2 composantes ## Time : ",acp_time,", erreur train/test : ",acp_train,"/",acp_test)
+
+        acp_time=time()
+
+        acp=OCT(Dmax,Nmin,newX2[train,:],Y[train],K,false,[0.0],false,time_limit)
+
+        acp_time=time()-acp_time
+        acp_train=score(predict(tree,newX2[train,:]),Y[train])
+        acp_test=score(predict(tree,newX2[test,:]),Y[test])
+
+
+
+        println("## ACP 3 composantes ## Time : ",acp_time,", erreur train/test : ",acp_train,"/",acp_test)
+    end  
+end
+
+function test_new_forest()
+    include("../data/real_world/iris.txt")
+    train1=[3*i for i in 1:50]
+    train2=[3*i+1 for i in 1:50]
+    test=[3*i+2 for i in 1:50]
+
+    trainglobal=append!(train1,train2)
+    trainforest=[train1,train2]
+
+    tps=time()
+    OCT_tree=classification_tree_MIO(3,1,X[trainglobal,:],Y[trainglobal],3,7)
+    tps=time()-tps
+
+    tree_train=score(predict(OCT_tree,X[trainglobal,:]),Y[trainglobal])
+    tree_test=score(predict(OCT_tree,X[test,:]),Y[test])
+
+    println("# OCT #, train/test : ",tree_train,"/",tree_test,", time : ",tps)
+
+    
+
+
 end

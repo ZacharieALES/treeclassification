@@ -479,3 +479,140 @@ function predict_forest(forest::Array{Tree,1},X::Array{Float64,2},K::Int64)
     end
     return(Y)
 end
+
+function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::Array{Int64,2},K::Int64,C::Int64=0,beta::Float64=0.0,time_limit::Int64=-1)
+    nb_tree=length(Y[:,1])
+
+    n=length(Y[1,:])
+    p=length(X[1,1,:])
+    Yk=-ones(Int64,nb_tree,n,K)
+
+    for q in 1:nb_tree
+        for i in 1:n
+            Yk[q,i,Y[q,i]]=1
+        end
+    end
+
+    eps=ones(Float64,nb_tree,p)
+    for q in 1:nb_tree
+        for i_1 in 1:n
+            for i_2 in i_1+1:n
+                for j in 1:p
+                    diff=abs(X[q,i_1,j]-X[q,i_2,j])
+                    if diff>0 && diff<eps[q,j]
+                        eps[q,j]=diff
+                    end
+                end
+            end
+        end
+    end
+
+    eps_min=ones(Float64,nb_tree)
+    for q in 1:nb_tree
+        for j in 1:p
+            if eps[q,j]<eps_min[q]
+                eps_min[q]=eps[q,j]
+            end
+        end
+    end
+
+    Count_class=zeros(Int64,K)
+    for q in 1:nb_tree
+        for i in 1:n
+            Count_class[Y[q,i]]+=1
+        end
+    end
+
+    L_hat=Count_class[1]
+    for k in 2:K
+        if Count_class[k]>L_hat
+            L_hat=Count_class[k]
+        end
+    end 
+
+    model=Model(CPLEX.Optimizer)
+
+    set_silent(model)
+
+    if time_limit!=-1
+        set_time_limit_sec(model,time_limit)
+    end
+
+    n_l=2^D #Leaves number
+    n_b=2^D-1 #Branch nodes number
+
+    # Variables d'origine
+
+    @variable(model, L[1:nb_tree,1:n_l],Int)
+    @variable(model, N[1:nb_tree,1:n_l],Int)
+    @variable(model, N_k[1:nb_tree,1:K,1:n_l],Int)
+    @variable(model, c[1:nb_tree,1:K,1:n_l],Bin)
+    @variable(model, z[1:nb_tree,1:n,1:n_l],Bin)
+    @variable(model, a[1:nb_tree,1:p,1:n_b],Bin)
+    @variable(model, b[1:nb_tree,1:n_b]) 
+    @variable(model, d[1:nb_tree,1:n_b],Bin)
+    @variable(model, l[1:nb_tree,1:n_l],Bin)
+
+    # Variables supplémentaires
+    @variable(model, A[1:nb_tree, 1:nb_tree,1:p,1:n_b],Bin)
+
+    # Contraintes d'origine
+
+    @constraint(model, [q in 1:nb_tree,i in 1:n], sum(z[q,i,t] for t in 1:n_l)==1)
+    @constraint(model, [q in 1:nb_tree,i in 1:n, t in 1:n_l], z[q,i,t]<=l[q,t])
+    @constraint(model, [q in 1:nb_tree,t in 1:n_l], sum(z[q,i,t] for i in 1:n) >= N_min*l[q,t])
+    @constraint(model, [q in 1:nb_tree,t in 1:n_b], sum(a[q,j,t] for j in 1:p)==d[q,t]) 
+    @constraint(model, [q in 1:nb_tree,t in 1:n_b], 0<= b[q,t])
+    @constraint(model, [q in 1:nb_tree,t in 1:n_b], b[q,t]<= d[q,t])
+    @constraint(model, [q in 1:nb_tree,t in 2:n_b], d[q,t]<=d[q,find_p(t)])
+    @constraint(model, [q in 1:nb_tree,k in 1:K, t in 1:n_l], L[q,t] >= N[q,t]-N_k[q,k,t]-n*(1-c[q,k,t]))
+    @constraint(model, [q in 1:nb_tree,k in 1:K, t in 1:n_l], L[q,t] <= N[q,t]-N_k[q,k,t]+n*c[q,k,t])
+    @constraint(model, [q in 1:nb_tree,t in 1:n_l], L[q,t]>=0)
+    @constraint(model, [q in 1:nb_tree,k in 1:K, t in 1:n_l], N_k[q,k,t] == (1/2)*(sum((1+Yk[q,i,k])*z[q,i,t] for i in 1:n)))
+    @constraint(model, [q in 1:nb_tree,t in 1:n_l], N[q,t] == sum(z[q,i,t] for i in 1:n))
+    @constraint(model, [q in 1:nb_tree,t in 1:n_l], l[q,t] == sum(c[q,k,t] for k in 1:K))
+    for t in 1:n_l
+        (Al,Ar)=find_Al_Ar(t+n_b)
+        @constraint(model,[q in 1:nb_tree,i in 1:n,m in Ar], sum(a[q,j,m]*X[q,i,j] for j in 1:p) >= b[q,m]-(1-z[q,i,t]))
+        @constraint(model,[q in 1:nb_tree,i in 1:n,m in Al], sum(a[q,j,m]*(X[q,i,j]+eps[q,j]/2) for j in 1:p)<= b[q,m]+(1+eps_min[q])*(1-z[q,i,t]))
+        @constraint(model, [q in 1:nb_tree,i in 1:n, m in Al], z[q,i,t]<=d[q,m])
+    end
+    @constraint(model,[q in 1:nb_tree] , sum(d[q,t] for t in 1:n_b)<=C)
+    
+    # Contraintes supplémentaires
+
+    @constraint(model, [q1 in 1:nb_tree, q2 in 1:nb_tree, j in 1:p, t in 1:n_b], a[q1,j,t]-a[q2,j,t] <= A[q1,q2,j,t])
+    @constraint(model, [q1 in 1:nb_tree, q2 in 1:nb_tree, j in 1:p, t in 1:n_b], -a[q1,j,t]+a[q2,j,t] <= A[q1,q2,j,t])
+    @constraint(model, [q1 in 1:nb_tree, q2 in 1:nb_tree, j in 1:p, t in 1:n_b], a[q1,j,t]+a[q2,j,t]+A[q1,q2,j,t]<=2)
+    @constraint(model, [q1 in 1:nb_tree, q2 in 1:nb_tree, j in 1:p, t in 1:n_b], a[q1,j,t]+a[q2,j,t] >= A[q1,q2,j,t])
+
+    # Objectifs (modifié par rapport à l'objectif d'origine)
+
+    @objective(model, Min, (1/L_hat)*sum(sum(L[q,t] for t in 1:n_l) for q in 1:nb_tree)+ beta/nb_tree*sum(sum(sum(sum(A[q1,q2,j,t] for j in 1:p) for t in 1:n_b) for q2 in q1+1:nb_tree)  for q1 in 1:nb_tree))
+    
+    optimize!(model)
+
+    final_c=zeros(Int64,nb_tree,n_l)
+    n_l=2^D
+    for q in 1:nb_tree
+        for t in 1:n_l
+            if round(value(l[q,t]))==1
+                k=1
+                while round(value(c[q,k,t]))!=1
+                    k=k+1
+                end
+                final_c[q,t]=k
+            else
+                final_c[q,t]=0
+            end
+        end
+    end
+
+    forest=Tree[]
+    for i in 1:nb_tree
+        append!(forest,Tree(D,value.(a[i,:,:]),value.(b[i,:]),final_c[i,:]))
+    end
+    return(forest)
+
+
+end

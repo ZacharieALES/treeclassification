@@ -198,10 +198,9 @@ function test_new_forest()
     test=[3*i+2 for i in 1:50]
 
     trainglobal=append!(train1,train2)
-    trainforest=[train1,train2]
 
     tps=time()
-    OCT_tree=classification_tree_MIO(3,1,X[trainglobal,:],Y[trainglobal],3,7)
+    OCT_tree,sc,gap=classification_tree_MIO(3,1,X[trainglobal,:],Y[trainglobal],K,7)
     tps=time()-tps
 
     tree_train=score(predict(OCT_tree,X[trainglobal,:]),Y[trainglobal])
@@ -209,7 +208,14 @@ function test_new_forest()
 
     println("# OCT #, train/test : ",tree_train,"/",tree_test,", time : ",tps)
 
-    
+    tps=time()
+    forest=classification_forest_MIO(3,1,[X[train1,:],X[train2,:]],[Y[train1],Y[train2]],K,7,0.5)
+    tps=time()-tps
+
+    forest_train=score(predict(forest,X[trainglobal,:],K),Y[trainglobal])
+    forest_test=score(predict(forest,X[test,:],K),Y[test])
+
+    println("# Forest #, train/test : ",forest_train,"/",forest_test,", time : ",tps)
 
 
 end

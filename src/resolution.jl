@@ -610,7 +610,7 @@ function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::
 
     forest=Tree[]
     for i in 1:nb_tree
-        append!(forest,Tree(D,value.(a[i,:,:]),value.(b[i,:]),final_c[i,:]))
+        append!(forest,[Tree(D,value.(a[i,:,:]),value.(b[i,:]),final_c[i,:])])
     end
     return(forest)
 

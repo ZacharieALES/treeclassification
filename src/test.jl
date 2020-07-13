@@ -193,11 +193,11 @@ end
 
 function test_new_forest()
     include("../data/real_world/iris.txt")
-    train1=[3*i for i in 1:50]
-    train2=[3*i+1 for i in 1:50]
-    test=[3*i+2 for i in 1:50]
+    train1=[3*i+1 for i in 0:49]
+    train2=[3*i+2 for i in 0:49]
+    test=[3*i+3 for i in 0:49]
 
-    trainglobal=append!(train1,train2)
+    trainglobal=vcat(train1,train2)
 
     tps=time()
     OCT_tree,sc,gap=classification_tree_MIO(3,1,X[trainglobal,:],Y[trainglobal],K,7)
@@ -208,12 +208,20 @@ function test_new_forest()
 
     println("# OCT #, train/test : ",tree_train,"/",tree_test,", time : ",tps)
 
+    X_forest=zeros(Float64,2,50,4)
+    X_forest[1,:,:]=X[train1,:]
+    X_forest[2,:,:]=X[train2,:]
+
+    Y_forest=zeros(Int64,2,50)
+    Y_forest[1,:]=Y[train1]
+    Y_forest[2,:]=Y[train2]
+
     tps=time()
-    forest=classification_forest_MIO(3,1,[X[train1,:],X[train2,:]],[Y[train1],Y[train2]],K,7,0.5)
+    forest=classification_forest_MIO(3,1,X_forest,Y_forest,K,7,0.5)
     tps=time()-tps
 
-    forest_train=score(predict(forest,X[trainglobal,:],K),Y[trainglobal])
-    forest_test=score(predict(forest,X[test,:],K),Y[test])
+    forest_train=score(predict_forest(forest,X[trainglobal,:],K),Y[trainglobal])
+    forest_test=score(predict_forest(forest,X[test,:],K),Y[test])
 
     println("# Forest #, train/test : ",forest_train,"/",forest_test,", time : ",tps)
 

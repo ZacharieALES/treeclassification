@@ -88,6 +88,8 @@ function predict(T::Tree,X::Array{Float64,2},need_leaf::Bool=false)
 end
 
 """
+Return the number of different labels comparing the two arrays given in argument.
+"""
 function score(Y1::Array{Int64,1},Y2::Array{Int64,1})
     return(sum(Y1[i]!=Y2[i] for i in 1:length(Y1)))
 end

@@ -1,8 +1,9 @@
 include("Tree.jl")
-"""
-Read a data file and create an array X containing the features and Y containing the class labels
-"""
 
+
+"""
+Apply a simple affine transformation on each feature of the dataset to make the data suitable with the algorithm
+"""
 function zero_one_scaling(X)
     n=length(X[:,1])
     p=length(X[1,:])
@@ -36,6 +37,10 @@ function zero_one_scaling(X)
     return(newX[:,indi])
 end
 
+"""
+Used if the labels are String or everything else but Integer.
+Create a new array with Integer labels and another array making the link between Integer and real labels.
+"""
 function create_integer_labels(Y::Array{Any,1})
     n=length(Y[:,1])
     labels_ref=[]
@@ -55,7 +60,9 @@ function create_integer_labels(Y::Array{Any,1})
 end
 
 
-
+"""
+Used to read a .txt format datafile
+"""
 function readDataFile(inputFile::String,start::Int64,column::Array{Bool,1},labels::Int64=-1,separator::Char=' ')
     dataFile=open(inputFile)
     data=readlines(dataFile)
@@ -99,10 +106,20 @@ function readDataFile(inputFile::String,start::Int64,column::Array{Bool,1},label
     return(X,Y)
 end
 
+"""
+Used to read a .jl data file.\n
+Example :\n
+X=[...]
+Y=[...]
+K=...
+"""
 function read_X_Y_file(inputFile::String)
     include(inputFile)
 end
 
+"""
+Save in a file the current data and labels.
+"""
 function save_X_Y(outputFile::String,X,Y)
     writer=open(outputFile,"w")
     print(writer,"X=")

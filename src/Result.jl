@@ -1,3 +1,7 @@
+"""
+A structure used to store the result of the test in the data folder, containing the main informations.
+Such as the time needed by each methods, the percentage of missclassification on train and test datasets.
+"""
 mutable struct Result
     OCT_D::Int64
     OCT_time::Float64
@@ -34,6 +38,9 @@ function Result(OCT_D::Int64,OCT_time::Float64,OCT_train_miss::Float64,OCT_test_
     return(this)
 end
 
+"""
+A function used to compute and store the mean of each features for a result folder.
+"""
 function synthetic_res(datadir::String)
     k=0
     mean_OCT_time=0

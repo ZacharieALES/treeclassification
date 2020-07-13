@@ -7,6 +7,7 @@ using JuMP
 
 using DecisionTree
 
+
 function find_Al_Ar_aux(x::Int64,Al::Array{Int64,1},Ar::Array{Int64,1})
     if x==1
         return(Al,Ar)
@@ -19,12 +20,18 @@ function find_Al_Ar_aux(x::Int64,Al::Array{Int64,1},Ar::Array{Int64,1})
     end
 end
 
+"""
+Function giving the Al and Ar index sets for a given node in a binary tree.
+"""
 function find_Al_Ar(x::Int64)
     Al=zeros(Int64,0)
     Ar=zeros(Int64,0)
     find_Al_Ar_aux(x,Al,Ar)
 end
 
+"""
+Function giving the father of a given node in a binary tree.
+"""
 function find_p(x::Int64)
     if x==1
         new_x=1
@@ -36,7 +43,23 @@ function find_p(x::Int64)
     return(new_x)
 end 
 
-
+"""
+Function solving the MIO problem.\n
+Arguments :\n
+    - D : the depth of the resulting tree 
+    - N_min : the minimum number of observation attributed to a leaf.
+    - X and Y : the data and labels
+    - K : the number of labels.
+Optionnal :\n
+    - C/alpha : constants linked to the complexity of the tree
+    - warm_start : You can give a warm_start tree as a starting point to seek the optimal solution
+    - time_limit (in second)
+    - H : is the approache uni or multi-variate.
+Result :\n
+    - The tree
+    - The missclassification on the training set
+    - The gap between the optimal solution and the solution found if the time limit was reached.
+"""
 function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=false,time_limit::Int64=-1)
     n=length(Y)
     p=length(X[1,:])
@@ -161,7 +184,7 @@ function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Ar
     end
 
 
-
+    #Warmstart part
     if warm_start.D !=0
         D_tree=warm_start.D
         n_b_tree=2^D_tree-1
@@ -292,6 +315,7 @@ function indice_min(liste)
     return(i_min)
 end
 
+
 function heuristic_OCT_H_aux(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,step::Int64,currentTree::Tree)
     max=2^D-1
     this_tree,miss,gap,z=classification_tree_MIO(1,1,X,Y,K,0,null_Tree(),true,0.0,true)
@@ -319,6 +343,11 @@ function heuristic_OCT_H_aux(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::I
 
 end
 
+
+"""
+Find a heuristic tree by applying the algorithm with a depth=1 recursively.\n 
+It gives a good warm_start solution for the multivariate approach.
+"""
 function heuristic_OCT_H(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64)
     p=length(X[1,:])
     n_b=2^D-1
@@ -328,6 +357,15 @@ function heuristic_OCT_H(D::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64
     return(current_tree,score(predict(current_tree,X),Y))
 end
 
+"""
+Optimal Classification Tree algorithm.\n
+Find the tree that minimize the missclassification of the dataset for a given depth.\n 
+Arguments :\n
+    - D : the depth of the resulting tree 
+    - N_min : the minimum number of observation attributed to a leaf.
+    - X and Y : the data and labels
+    - K : the number of labels.
+"""
 function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0],need_gap::Bool=true,time_limit::Int64=-1)
     
     start=time()
@@ -415,7 +453,10 @@ end
 
 
 
-
+"""
+First version of a Forest version of OCT dividing the training set in several sets. The objective was to reduce the computing time.
+The algorithm create one tree for each subset to create a forest.
+"""
 function OCT_forest(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array=[0.0],nb_tree::Int64=1,percentage_for_one::Int64=-1,time_limit::Int64=-1)
     n=length(X[:,1])
     p=length(X[1,:])
@@ -449,7 +490,9 @@ function OCT_forest(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64
     return(trees)
 end
 
-
+"""
+A prediction function for forest algorithm that keep the most predicted label by the forest for each observation.
+""" 
 function predict_forest(forest::Array{Tree,1},X::Array{Float64,2},K::Int64)
     n=length(X[:,1])
     Y=zeros(Int64,n)
@@ -480,6 +523,11 @@ function predict_forest(forest::Array{Tree,1},X::Array{Float64,2},K::Int64)
     return(Y)
 end
 
+
+"""
+The second version of forest algorithm that add the creation of the different trees to the MIO problem thanks to new variables and constraints.
+The aim is to create trees that are close one to another.
+"""
 function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::Array{Int64,2},K::Int64,C::Int64=0,beta::Float64=0.0,time_limit::Int64=-1)
     nb_tree=length(Y[:,1])
 

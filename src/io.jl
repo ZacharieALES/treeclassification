@@ -129,4 +129,39 @@ function save_X_Y(outputFile::String,X,Y)
     close(writer)
 end
 
+function print_tree(T::Tree)
+    D=T.D
+    p=length(T.a[:,1])
+    for k in 0:D-1
+        for k2 in 1:div(2^(D-1),2^(D-k-1))
+            for k3 in 1:2^(D-k-1)
+                print("     ")
+            end
+            j=1
+            while j<p+1 && T.a[j,2^k+k2-1]!=1
+                j+=1
+            end
+            if j==p+1
+                print(0)
+            else
+                print(j)
+            end
+            print("/",round(T.b[2^k+k2-1],digits=2))
+        end
+        println("")
+    end
+    for k in 1:2^D
+        print(T.c[k])
+        print("     ")
+    end
+end
+
+function print_forest(forest::Array{Tree,1})
+    n=length(forest)
+    for i in 1:n
+        print_tree(forest[i])
+        println("")
+    end
+end
+
 

@@ -60,7 +60,7 @@ Result :\n
     - The missclassification on the training set
     - The gap between the optimal solution and the solution found if the time limit was reached.
 """
-function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=false,time_limit::Int64=-1)
+function classification_tree_MIO(D::Int64,N_min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,C::Int64=0,warm_start::Tree=null_Tree(),H::Bool=false,alpha::Float64=0.0,needZ::Bool=false,verbose::Bool=true,time_limit::Int64=-1)
     n=length(Y)
     p=length(X[1,:])
     Yk=-ones(Int64,n,K)
@@ -366,7 +366,7 @@ Arguments :\n
     - X and Y : the data and labels
     - K : the number of labels.
 """
-function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0],need_gap::Bool=true,time_limit::Int64=-1)
+function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array::Array{Float64,1}=[0.0],need_gap::Bool=false,time_limit::Int64=-1)
     
     start=time()
 
@@ -447,6 +447,7 @@ function OCT(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::
     if need_gap
         return(warm_start_list[best_i],gaps[best_i])
     else
+        
         return(warm_start_list[best_i])
     end
 end
@@ -457,7 +458,7 @@ end
 First version of a Forest version of OCT dividing the training set in several sets. The objective was to reduce the computing time.
 The algorithm create one tree for each subset to create a forest.
 """
-function OCT_forest(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array=[0.0],nb_tree::Int64=1,percentage_for_one::Int64=-1,time_limit::Int64=-1)
+function OCT_forest_v1(D_max::Int64,N_Min::Int64,X::Array{Float64,2},Y::Array{Int64,1},K::Int64,H::Bool=false,alpha_array=[0.0],nb_tree::Int64=1,percentage_for_one::Int64=-1,time_limit::Int64=-1)
     n=length(X[:,1])
     p=length(X[1,:])
     n_one_tree=0
@@ -511,14 +512,21 @@ function predict_forest(forest::Array{Tree,1},X::Array{Float64,2},K::Int64)
 
         max=count[1]
         j_max=1
+        equality=false
         for j in 2:K
             if max<count[j]
                 max=count[j]
                 j_max=j
+                equality=false
+            elseif max==count[j]
+                equality=true                
             end
         end
-
-        Y[i]=j_max
+        if equality
+            Y[i]=-1
+        else
+            Y[i]=j_max
+        end
     end
     return(Y)
 end
@@ -580,7 +588,7 @@ function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::
 
     model=Model(CPLEX.Optimizer)
 
-    set_silent(model)
+    #set_silent(model)
 
     if time_limit!=-1
         set_time_limit_sec(model,time_limit)
@@ -636,7 +644,7 @@ function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::
 
     # Objectifs (modifié par rapport à l'objectif d'origine)
 
-    @objective(model, Min, (1/L_hat)*sum(sum(L[q,t] for t in 1:n_l) for q in 1:nb_tree)+ beta/nb_tree*sum(sum(sum(sum(A[q1,q2,j,t] for j in 1:p) for t in 1:n_b) for q2 in q1+1:nb_tree)  for q1 in 1:nb_tree))
+    @objective(model, Min, (1/L_hat)*sum(sum(L[q,t] for t in 1:n_l) for q in 1:nb_tree)+ 2*beta/(nb_tree^2-nb_tree)*sum(sum(sum(sum(A[q1,q2,j,t] for j in 1:p) for t in 1:n_b) for q2 in q1+1:nb_tree)  for q1 in 1:nb_tree))
     
     optimize!(model)
 
@@ -662,5 +670,36 @@ function classification_forest_MIO(D::Int64,N_min::Int64,X::Array{Float64,3},Y::
     end
     return(forest)
 
+end
 
+function forest_MIO_algorithm(D::Int64,N_min::Int64,X::Array{Float64,3},Y::Array{Int64,2},K::Int64,beta::Array{Float64,1}=[0.0],time_limit::Int64=-1)
+    start=time()
+
+    n_tree=length(X[:,1,1])
+    
+    forest_list=Array{Tree,1}[]
+    miss_list=Int64[]
+
+    k=length(beta)
+    Cmax=2^D-1
+    for i in 1:k
+        
+        allowed_time=-1
+        if time_limit!=-1
+            remaining_time=time_limit-(time()-start)
+            allowed_time=convert(Int64,ceil(remaining_time/(k-i+1)))
+        end
+
+        
+        forest=classification_forest_MIO(D,N_min,X,Y,K,Cmax,beta[i],allowed_time)
+        miss=0
+        for n in 1:n_tree
+            miss+=score(predict_forest(forest,X[n,:,:],K),Y[n,:])
+        end
+
+        append!(forest_list,[forest])
+        append!(miss_list,[miss])
+        
+    end
+    return(forest_list[indice_min(miss_list)])
 end

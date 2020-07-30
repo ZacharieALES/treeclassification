@@ -3,9 +3,11 @@ include("resolution.jl")
 using MultivariateStats
 using Random
 
-function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0],time_limit::Int64=-1)
+function solveDataSet(datadir::String,prop::Int64,H=false,alpha_array=[0.0],time_limit::Int64=-1)
     resFolder="../res"
     dataFolder="../data"
+
+    Dmax=3
 
     cart=0
     oct=0
@@ -17,16 +19,31 @@ function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0]
         include(dataFolder*"/"*datadir*"/"*file)
 
         n=length(Y)
+        factor=(100-prop)/100
 
         train,test=generate_sample(n,prop)
 
         OCT_time=time()
 
-        tree,gap=OCT(Dmax,1,X[train,:],Y[train],K,H,alpha_array,false,time_limit)
+        tree=OCT(Dmax,1,X[train,:],Y[train],K,H,alpha_array,false,time_limit)
 
         OCT_time=time()-OCT_time
         OCT_train=score(predict(tree,X[train,:]),Y[train])
         OCT_test=score(predict(tree,X[test,:]),Y[test])
+
+        println("# OCT D=3 #, time : ",OCT_time)
+        println("train : ",OCT_train*100/(n*factor),", test : ",OCT_test*100/(n*(1-factor)))
+
+        OCT_time=time()
+
+        tree=OCT(Dmax-1,1,X[train,:],Y[train],K,H,alpha_array,false,time_limit)
+
+        OCT_time=time()-OCT_time
+        OCT_train=score(predict(tree,X[train,:]),Y[train])
+        OCT_test=score(predict(tree,X[test,:]),Y[test])
+
+        println("# OCT D=2 #, time : ",OCT_time)
+        println("train : ",OCT_train*100/(n*factor),", test : ",OCT_test*100/(n*(1-factor)))
         
         CART_time=time()
     
@@ -39,6 +56,10 @@ function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0]
         CART_train=score(DecisionTree.predict(CART_tree,X[train,:]),Y[train])
         CART_test=score(DecisionTree.predict(CART_tree,X[test,:]),Y[test])
 
+        println("# CART #, time : ",CART_time,", Depth : ",CART_size)
+        println("train : ",CART_train*100/(n*factor),", test : ",CART_test*100/(n*(1-factor)))
+
+        """
         limited_time=time()
         
         limited_tree=DecisionTreeClassifier(max_depth=Dmax)
@@ -48,8 +69,7 @@ function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0]
 
         limited_train=score(DecisionTree.predict(limited_tree,X[train,:]),Y[train])
         limited_test=score(DecisionTree.predict(limited_tree,X[test,:]),Y[test])
-
-        factor=(100-prop)/100
+      
 
         res=Result(Dmax,OCT_time,OCT_train*100/(n*factor),OCT_test*100/(n*(1-factor)),CART_size,CART_time,CART_train*100/(n*factor),CART_test*100/(n*(1-factor)),limited_time,limited_train*100/(n*factor),limited_test*100/(n*(1-factor)))
 
@@ -68,6 +88,8 @@ function solveDataSet(datadir::String,prop::Int64,Dmax,H=false,alpha_array=[0.0]
 
         close(writer)
 
+        """
+
     end
 
 end
@@ -76,7 +98,7 @@ function solveAll(D::Int64=2,time_limit::Int64=-1,H::Bool=false)
     for dir in readdir("../data")
         if isdir("../data/"*dir)
             println("Currently in folder : ", dir)
-            solveDataSet(dir,25,D,H,[0.0],time_limit)
+            solveDataSet(dir,25,H,[0.0],time_limit)
             synthetic_res("../res/"*dir)
         end
     end
@@ -114,7 +136,7 @@ function test_forest()
 
         forest_time=time()
 
-        forest=OCT_forest(Dmax,Nmin,X[train,:],Y[train],K,false,[0.0],nb_tree,percentage,time_limit)
+        forest=OCT_forest_v1(Dmax,Nmin,X[train,:],Y[train],K,false,[0.0],nb_tree,percentage,time_limit)
         
         forest_time=time()-forest_time
         forest_train=score(predict_forest(forest,X[train,:],K),Y[train])
@@ -227,3 +249,165 @@ function test_new_forest()
 
 
 end
+
+function compare_forest()
+    datadir="../data/real_world"
+    prop=25
+    Dmax=3
+    Nmin=1
+    time_limit=180
+
+
+    for file in filter(x->occursin(".txt", x), readdir(datadir))
+        println("")
+        println("-- Resolution of ", file)
+
+        include(datadir*"/"*file)
+
+        n=length(Y)
+        n4=div(n,4)
+        p=length(X[1,:])
+
+        
+
+        writer=open("../res/forest_res/"*file,"w")
+
+        
+
+        train1=[4*i+1 for i in 0:n4-1]
+        train2=[4*i+2 for i in 0:n4-1]
+        train3=[4*i+3 for i in 0:n4-1]
+        test=[4*i+3 for i in 0:n4-1]
+        trainglobal=vcat(vcat(train1,train2),train3)
+
+        n_train=length(trainglobal)
+        n_test=length(test)
+
+        
+        tps=time()
+        OCT_tree=OCT(Dmax,1,X[trainglobal,:],Y[trainglobal],K,false,[0.0],false,time_limit)
+        tps=time()-tps
+
+        tree_train=score(predict(OCT_tree,X[trainglobal,:]),Y[trainglobal])
+        tree_test=score(predict(OCT_tree,X[test,:]),Y[test])
+
+        println(writer,"# OCT #, train/test : ",tree_train/n_train*100,"/",tree_test/n_test*100,", time : ",tps)
+        println(writer,"Arbre fourni par OCT")
+        println(writer,OCT_tree)
+
+        tps=time()
+
+        forest_v1=OCT_forest_v1(Dmax,1,X[trainglobal,:],Y[trainglobal],K,false,[0.0],3,40,time_limit)
+
+        tps=time()-tps
+
+        v1_train=score(predict_forest(forest_v1,X[trainglobal,:],K),Y[trainglobal])
+        v1_test=score(predict_forest(forest_v1,X[test,:],K),Y[test])
+
+        println(writer,"# forest_v1 #, train/test : ",v1_train/n_train*100,"/",v1_test/n_test*100,", time : ",tps)
+        println(writer,"Foret fournie")
+        println(writer,forest_v1)
+
+
+        X_forest=zeros(Float64,3,n4,p)
+        X_forest[1,:,:]=X[train1,:]
+        X_forest[2,:,:]=X[train2,:]
+        X_forest[3,:,:]=X[train3,:]
+
+        Y_forest=zeros(Int64,3,n4)
+        Y_forest[1,:]=Y[train1]
+        Y_forest[2,:]=Y[train2]
+        Y_forest[3,:]=Y[train3]
+
+        tps=time()
+        forest=forest_MIO_algorithm(Dmax,1,X_forest,Y_forest,K,[0.2, 0.5, 1.0, 2.0], time_limit)
+        tps=time()-tps
+
+        forest_train=score(predict_forest(forest,X[trainglobal,:],K),Y[trainglobal])
+        forest_test=score(predict_forest(forest,X[test,:],K),Y[test])
+
+        println(writer,"# Forest_v2 #, train/test : ",forest_train/n_train*100,"/",forest_test/n_test*100,", time : ",tps)
+        println(writer,forest)
+
+        close(writer)
+
+    end
+    
+end
+function beta_influence()
+    betas=[0.0, 0.1, 0.5, 1.0, 2.0 , 5.0]
+    
+    include("../data/real_world/ecoli.txt")
+
+    n=length(Y)
+    n4=div(n,4)
+    p=length(X[1,:])
+
+    train1=[4*i+1 for i in 0:n4-1]
+    train2=[4*i+2 for i in 0:n4-1]
+    train3=[4*i+3 for i in 0:n4-1]
+    test=[4*i+3 for i in 0:n4-1]
+    trainglobal=vcat(vcat(train1,train2),train3)
+
+    X_forest=zeros(Float64,3,n4,p)
+    X_forest[1,:,:]=X[train1,:]
+    X_forest[2,:,:]=X[train2,:]
+    X_forest[3,:,:]=X[train3,:]
+
+    Y_forest=zeros(Int64,3,n4)
+    Y_forest[1,:]=Y[train1]
+    Y_forest[2,:]=Y[train2]
+    Y_forest[3,:]=Y[train3]
+
+    writer=open("../res/v2forest_res/ecoli.txt","w")
+    for beta in betas
+        tps=time()
+        forest=classification_forest_MIO(2,1,X_forest,Y_forest,K,3,beta,180)
+        tps=time()-tps
+
+        res_train=score(predict_forest(forest,X[trainglobal,:],K),Y[trainglobal])
+        res_test=score(predict_forest(forest,X[test,:],K),Y[test])
+        println(writer,"Beta = ",beta,", time : ",tps, "train/test : ",res_train/length(trainglobal)*100,"/",res_test/length(test)*100)
+        println(writer,forest)
+    end
+
+    close(writer)
+
+
+    include("../data/real_world/iris.txt")
+    n=length(Y)
+    n4=div(n,4)
+    p=length(X[1,:])
+
+    train1=[4*i+1 for i in 0:n4-1]
+    train2=[4*i+2 for i in 0:n4-1]
+    train3=[4*i+3 for i in 0:n4-1]
+    test=[4*i+3 for i in 0:n4-1]
+    trainglobal=vcat(vcat(train1,train2),train3)
+
+    X_forest=zeros(Float64,3,n4,p)
+    X_forest[1,:,:]=X[train1,:]
+    X_forest[2,:,:]=X[train2,:]
+    X_forest[3,:,:]=X[train3,:]
+
+    Y_forest=zeros(Int64,3,n4)
+    Y_forest[1,:]=Y[train1]
+    Y_forest[2,:]=Y[train2]
+    Y_forest[3,:]=Y[train3]
+
+    writer=open("../res/v2forest_res/iris.txt","w")
+    for beta in betas
+        tps=time()
+        forest=classification_forest_MIO(2,1,X_forest,Y_forest,K,3,beta)
+        tps=time()-tps
+
+        res_train=score(predict_forest(forest,X[trainglobal,:],K),Y[trainglobal])
+        res_test=score(predict_forest(forest,X[test,:],K),Y[test])
+        println(writer,"Beta = ",beta,", time : ",tps, "train/test : ",res_train/length(trainglobal)*100,"/",res_test/length(test)*100)
+        println(writer,forest)
+    end
+
+    close(writer)
+end
+
+
